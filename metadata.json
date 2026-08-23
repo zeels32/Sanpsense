@@ -1,0 +1,7 @@
+{
+  "name": "Camera AI",
+  "description": "Background camera capture listener with instant photo display and AI enhancement.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,72 @@
+package com.example
+
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
+import com.example.service.CameraCaptureService
+import com.example.ui.screen.CameraAiScreen
+import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.viewmodel.CameraAiViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+
+class MainActivity : ComponentActivity() {
+
+    private val viewModel: CameraAiViewModel by viewModels()
+
+    @OptIn(ExperimentalPermissionsApi::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        setContent {
+            MyApplicationTheme {
+                // Determine permissions based on API level
+                val permissionsToRequest = buildList {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        add(Manifest.permission.READ_MEDIA_IMAGES)
+                        add(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                }
+
+                val permissionsState = rememberMultiplePermissionsState(permissions = permissionsToRequest)
+
+                LaunchedEffect(permissionsState.allPermissionsGranted) {
+                    if (permissionsState.allPermissionsGranted) {
+                        CameraCaptureService.start(this@MainActivity)
+                        viewModel.refreshLatestPhoto()
+                    } else {
+                        permissionsState.launchMultiplePermissionRequest()
+                    }
+                }
+
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    CameraAiScreen(viewModel = viewModel)
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshLatestPhoto()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.refreshLatestPhoto()
+    }
+}
+

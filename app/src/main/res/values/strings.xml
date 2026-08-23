@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">Camera AI</string>
+    <string name="title_camera_listener">Camera AI Enhancer</string>
+    <string name="subtitle_camera_listener">Detects scene type with Gemini LLM and custom-remasters photos</string>
+    <string name="service_running_title">Camera AI Service Active</string>
+    <string name="service_running_desc">Listening for new camera photos in background…</string>
+    <string name="new_photo_detected_title">New Camera Photo Captured!</string>
+    <string name="new_photo_detected_desc">Tap to auto-detect scene and remaster with Gemini AI</string>
+    <string name="btn_enhance_ai">Auto Enhance</string>
+    <string name="btn_open_camera">Open Camera</string>
+    <string name="btn_save_image">Save Enhanced</string>
+    <string name="btn_share_image">Share</string>
+    <string name="status_listening">Listening in Background</string>
+    <string name="status_stopped">Listener Inactive</string>
+    <string name="empty_photo_title">No Camera Photos Yet</string>
+    <string name="empty_photo_desc">Capture a photo with your device camera to see it appear here instantly!</string>
+    <string name="mode_auto">Auto Intelligent</string>
+    <string name="tab_studio">Studio</string>
+    <string name="tab_gallery">AI Gallery</string>
+    <string name="tab_queue">AI Queue</string>
+    <string name="auto_process_title">Auto-Enhance Captures</string>
+    <string name="auto_process_desc">Auto-classify scene &amp; remaster with Gemini as soon as captured</string>
+    <string name="gallery_title">AI Enhanced Gallery</string>
+    <string name="gallery_subtitle">All Gemini AI remastered photos saved to your device</string>
+    <string name="gallery_empty_title">No AI Photos Processed Yet</string>
+    <string name="gallery_empty_desc">Photos remastered with Gemini AI will automatically appear here</string>
+    <string name="queue_title">AI Enhancement Queue</string>
+    <string name="queue_subtitle">Managing parallel and rapid camera capture requests</string>
+    <string name="re_enhance_title">Re-Enhance Photo</string>
+</resources>
