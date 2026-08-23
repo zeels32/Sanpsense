@@ -18,6 +18,15 @@
     <string name="tab_studio">Studio</string>
     <string name="tab_gallery">AI Gallery</string>
     <string name="tab_queue">AI Queue</string>
+    <string name="tab_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Preferences &amp; Camera Automation</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_camera_title">DCIM Camera Monitoring</string>
+    <string name="settings_auto_process_title">Auto DCIM Capture Monitoring</string>
+    <string name="settings_auto_process_desc">Listen for new photos taken by device camera and automatically queue for Gemini AI remastering</string>
+    <string name="settings_ai_engine_title">AI Remastering Engine</string>
+    <string name="settings_about_title">About Snapsense</string>
     <string name="auto_process_title">Auto-Enhance Captures</string>
     <string name="auto_process_desc">Auto-classify scene &amp; remaster with Gemini as soon as captured</string>
     <string name="gallery_title">AI Enhanced Gallery</string>

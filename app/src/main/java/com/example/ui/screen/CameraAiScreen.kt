@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.Queue
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShutterSpeed
 import androidx.compose.material.icons.filled.Tune
@@ -165,8 +166,6 @@ fun CameraAiScreen(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val dcimLazyPagingItems = viewModel.dcimPagingFlow.collectAsLazyPagingItems()
 
-    var showThemeDialog by remember { mutableStateOf(false) }
-
     val pendingQueueCount = queueItems.count { it.status is QueueItemStatus.Pending || it.status is QueueItemStatus.InProgress }
 
     LaunchedEffect(saveStatusMessage) {
@@ -174,17 +173,6 @@ fun CameraAiScreen(
             snackbarHostState.showSnackbar(msg)
             viewModel.clearSaveStatus()
         }
-    }
-
-    if (showThemeDialog) {
-        ThemeSelectionDialog(
-            currentMode = themeMode,
-            onSelectMode = { mode ->
-                viewModel.setThemeMode(mode)
-                showThemeDialog = false
-            },
-            onDismiss = { showThemeDialog = false }
-        )
     }
 
     if (isCameraOpen) {
@@ -248,13 +236,10 @@ fun CameraAiScreen(
                             latestPhoto = latestPhoto,
                             dcimLazyPagingItems = dcimLazyPagingItems,
                             isServiceActive = isServiceActive,
-                            isAutoProcessEnabled = isAutoProcessEnabled,
                             pendingQueueCount = pendingQueueCount,
                             enhancementState = enhancementState,
                             isShowingOriginal = isShowingOriginal,
-                            isSaving = isSaving,
-                            themeMode = themeMode,
-                            onOpenThemeDialog = { showThemeDialog = true }
+                            isSaving = isSaving
                         )
                     }
                     StudioTab.GALLERY -> {
@@ -262,6 +247,9 @@ fun CameraAiScreen(
                     }
                     StudioTab.QUEUE -> {
                         AiQueueScreen(viewModel = viewModel)
+                    }
+                    StudioTab.SETTINGS -> {
+                        SettingsScreen(viewModel = viewModel)
                     }
                 }
             }
@@ -385,6 +373,27 @@ fun StudioBottomNavigationBar(
             ),
             modifier = Modifier.testTag("nav_tab_queue")
         )
+
+        NavigationBarItem(
+            selected = currentTab == StudioTab.SETTINGS,
+            onClick = { onSelectTab(StudioTab.SETTINGS) },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    modifier = Modifier.size(24.dp)
+                )
+            },
+            label = { Text("Settings", fontWeight = if (currentTab == StudioTab.SETTINGS) FontWeight.Bold else FontWeight.Normal) },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = BentoTheme.colors.purplePrimary,
+                selectedTextColor = BentoTheme.colors.purplePrimary,
+                indicatorColor = BentoTheme.colors.purpleContainer,
+                unselectedIconColor = BentoTheme.colors.textSecondary,
+                unselectedTextColor = BentoTheme.colors.textSecondary
+            ),
+            modifier = Modifier.testTag("nav_tab_settings")
+        )
     }
 }
 
@@ -394,13 +403,10 @@ fun StudioWorkspaceContent(
     latestPhoto: CameraPhoto?,
     dcimLazyPagingItems: LazyPagingItems<CameraPhoto>,
     isServiceActive: Boolean,
-    isAutoProcessEnabled: Boolean,
     pendingQueueCount: Int,
     enhancementState: EnhancementUiState,
     isShowingOriginal: Boolean,
-    isSaving: Boolean,
-    themeMode: ThemeMode,
-    onOpenThemeDialog: () -> Unit
+    isSaving: Boolean
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -426,20 +432,7 @@ fun StudioWorkspaceContent(
         // Bento Header Section
         BentoHeader(
             isServiceActive = isServiceActive,
-            themeMode = themeMode,
-            onToggleService = { viewModel.toggleBackgroundService() },
-            onOpenThemeDialog = onOpenThemeDialog,
-            onRefresh = {
-                viewModel.refreshLatestPhoto()
-                viewModel.refreshDcimPaging()
-                dcimLazyPagingItems.refresh()
-            }
-        )
-
-        // Auto-Process Toggle Bento Card
-        AutoProcessToggleCard(
-            isAutoProcessEnabled = isAutoProcessEnabled,
-            onToggle = { enabled -> viewModel.setAutoProcessEnabled(enabled) }
+            onToggleService = { viewModel.toggleBackgroundService() }
         )
 
         // Active Queue Banner (when photos are actively processing)
@@ -639,10 +632,7 @@ fun AutoProcessToggleCard(
 @Composable
 fun BentoHeader(
     isServiceActive: Boolean,
-    themeMode: ThemeMode,
-    onToggleService: () -> Unit,
-    onOpenThemeDialog: () -> Unit,
-    onRefresh: () -> Unit
+    onToggleService: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -678,47 +668,6 @@ fun BentoHeader(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = BentoTheme.colors.textSecondary
-                )
-            }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(
-                onClick = onRefresh,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(BentoTheme.colors.cardMuted)
-                    .testTag("refresh_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Refresh",
-                    tint = BentoTheme.colors.textPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            IconButton(
-                onClick = onOpenThemeDialog,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(BentoTheme.colors.purpleContainer)
-                    .testTag("theme_toggle_button")
-            ) {
-                Icon(
-                    imageVector = when (themeMode) {
-                        ThemeMode.LIGHT -> Icons.Default.LightMode
-                        ThemeMode.DARK -> Icons.Default.DarkMode
-                        ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
-                    },
-                    contentDescription = "Change Theme (${themeMode.name})",
-                    tint = BentoTheme.colors.purplePrimary,
-                    modifier = Modifier.size(20.dp)
                 )
             }
         }

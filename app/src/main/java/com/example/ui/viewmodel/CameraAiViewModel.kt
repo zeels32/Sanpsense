@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
 enum class StudioTab {
     STUDIO,
     GALLERY,
-    QUEUE
+    QUEUE,
+    SETTINGS
 }
 
 class CameraAiViewModel(application: Application) : AndroidViewModel(application) {
@@ -213,6 +214,13 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
 
     fun setAutoProcessEnabled(enabled: Boolean) {
         queueManager.setAutoProcessEnabled(enabled)
+        if (enabled) {
+            CameraCaptureService.start(getApplication())
+            repository.setServiceActive(true)
+        } else {
+            CameraCaptureService.stop(getApplication())
+            repository.setServiceActive(false)
+        }
     }
 
     fun enqueueCurrentPhoto(preset: EnhancementPreset = EnhancementPreset.AUTO) {

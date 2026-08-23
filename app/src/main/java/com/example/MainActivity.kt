@@ -56,7 +56,9 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(permissionsState.allPermissionsGranted) {
                     if (permissionsState.allPermissionsGranted) {
-                        CameraCaptureService.start(this@MainActivity)
+                        if (viewModel.isAutoProcessEnabled.value) {
+                            CameraCaptureService.start(this@MainActivity)
+                        }
                         viewModel.refreshLatestPhoto()
                     } else {
                         permissionsState.launchMultiplePermissionRequest()
