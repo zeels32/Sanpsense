@@ -332,6 +332,8 @@ private fun CameraViewContent(
                         .pointerInput(lensFacing) {
                             detectTapGestures { offset ->
                                 focusPoint = offset
+                                setExposure(0)
+                                dragAccumulator = 0f
                                 val pView = previewView ?: return@detectTapGestures
                                 val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
                                     pView.width.toFloat(),
