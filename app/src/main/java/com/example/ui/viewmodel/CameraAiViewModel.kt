@@ -7,6 +7,10 @@ import android.net.Uri
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.data.ai.GeminiApiException
 import com.example.data.ai.GeminiVisionService
 import com.example.data.db.AppDatabase
@@ -17,13 +21,17 @@ import com.example.data.model.CameraPhoto
 import com.example.data.model.EnhancementPreset
 import com.example.data.model.EnhancementQueueItem
 import com.example.data.model.EnhancementUiState
+import com.example.data.paging.DcimPagingSource
 import com.example.data.repository.AiQueueManager
 import com.example.data.repository.CameraCaptureRepository
 import com.example.service.CameraCaptureService
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -80,8 +88,45 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
     private val _selectedGalleryPhoto = MutableStateFlow<EnhancedPhotoEntity?>(null)
     val selectedGalleryPhoto: StateFlow<EnhancedPhotoEntity?> = _selectedGalleryPhoto.asStateFlow()
 
+    // Paging 3 Flow for DCIM Gallery
+    private val _refreshPagingTrigger = MutableStateFlow(0)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val dcimPagingFlow: Flow<PagingData<CameraPhoto>> = _refreshPagingTrigger
+        .flatMapLatest {
+            Pager(
+                config = PagingConfig(
+                    pageSize = 10,
+                    enablePlaceholders = false,
+                    prefetchDistance = 0, // Disable prefetch so next page loads strictly on-demand when user scrolls
+                    initialLoadSize = 10
+                ),
+                pagingSourceFactory = { DcimPagingSource(repository) }
+            ).flow
+        }
+        .cachedIn(viewModelScope)
+
+    // DCIM Photos for Studio Grid
+    private val _dcimPhotos = MutableStateFlow<List<CameraPhoto>>(emptyList())
+    val dcimPhotos: StateFlow<List<CameraPhoto>> = _dcimPhotos.asStateFlow()
+
+    // Infinite Scroll Pagination for DCIM Photos
+    val pageSize: Int = 10
+    private val _visibleDcimCount = MutableStateFlow(pageSize)
+    val visibleDcimCount: StateFlow<Int> = _visibleDcimCount.asStateFlow()
+
+    // Currently Selected Photo for Fullscreen Preview & Enhance Modal
+    private val _previewPhoto = MutableStateFlow<CameraPhoto?>(null)
+    val previewPhoto: StateFlow<CameraPhoto?> = _previewPhoto.asStateFlow()
+
     init {
         refreshLatestPhoto()
+        loadDcimPhotos()
+    }
+
+    fun refreshDcimPaging() {
+        _refreshPagingTrigger.value += 1
+        loadDcimPhotos()
     }
 
     fun openCamera() {
@@ -93,22 +138,58 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onPhotoCaptured(uri: Uri) {
-        _isCameraOpen.value = false
+        // Do not close camera on captured photo, keep user in camera session
         viewModelScope.launch {
             val photo = repository.queryPhotoByUri(uri)
             if (photo != null) {
                 repository.setLatestPhoto(photo)
-                _enhancementState.value = EnhancementUiState.Idle
-                _currentTab.value = StudioTab.STUDIO
+                refreshDcimPaging()
 
                 if (isAutoProcessEnabled.value) {
                     queueManager.enqueue(photo, _selectedPreset.value, force = true)
-                    _saveStatusMessage.value = "Photo captured! Gemini AI Remastering started."
+                    _saveStatusMessage.value = "Photo captured! Gemini AI Remastering enqueued."
                 } else {
-                    _saveStatusMessage.value = "Photo captured from in-app camera."
+                    _saveStatusMessage.value = "Photo captured & saved to DCIM!"
                 }
             }
         }
+    }
+
+    fun openPhotoPreview(photo: CameraPhoto) {
+        _previewPhoto.value = photo
+    }
+
+    fun closePhotoPreview() {
+        _previewPhoto.value = null
+    }
+
+    fun loadMoreDcimPhotos() {
+        val total = _dcimPhotos.value.size
+        if (_visibleDcimCount.value < total) {
+            _visibleDcimCount.value = (_visibleDcimCount.value + pageSize).coerceAtMost(total)
+        }
+    }
+
+    fun loadDcimPhotos() {
+        viewModelScope.launch {
+            val photos = repository.queryAllDcimPhotos()
+            if (photos.isNotEmpty()) {
+                _dcimPhotos.value = photos
+            } else if (_dcimPhotos.value.isEmpty()) {
+                // Generate a sample photo so user can test the grid immediately
+                val sample = repository.createSampleCameraPhoto()
+                _dcimPhotos.value = listOf(sample)
+            }
+            if (_visibleDcimCount.value < pageSize) {
+                _visibleDcimCount.value = pageSize
+            }
+        }
+    }
+
+    fun enhanceSpecificPhoto(photo: CameraPhoto) {
+        repository.setLatestPhoto(photo)
+        queueManager.enqueue(photo, EnhancementPreset.AUTO, force = true)
+        _saveStatusMessage.value = "Added \"${photo.displayName}\" to Gemini AI Queue!"
     }
 
     fun selectTab(tab: StudioTab) {
@@ -312,6 +393,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _enhancementState.value = EnhancementUiState.Idle
             val sample = repository.createSampleCameraPhoto()
+            refreshDcimPaging()
             if (isAutoProcessEnabled.value) {
                 queueManager.enqueue(sample, _selectedPreset.value, force = true)
             }

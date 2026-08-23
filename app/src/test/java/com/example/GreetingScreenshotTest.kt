@@ -24,7 +24,7 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        EmptyCameraState(onLaunchCamera = {}, onLoadSample = {})
+        EmptyCameraState(onLoadSample = {})
       }
     }
 

@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -33,15 +36,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Compare
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Nightlight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -81,6 +91,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -102,6 +113,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -150,6 +163,8 @@ fun CameraAiScreen(
     val isShowingOriginal by viewModel.isShowingOriginal.collectAsStateWithLifecycle()
     val saveStatusMessage by viewModel.saveStatusMessage.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
+    val previewPhoto by viewModel.previewPhoto.collectAsStateWithLifecycle()
+    val dcimLazyPagingItems = viewModel.dcimPagingFlow.collectAsLazyPagingItems()
 
     val pendingQueueCount = queueItems.count { it.status is QueueItemStatus.Pending || it.status is QueueItemStatus.InProgress }
 
@@ -166,9 +181,12 @@ fun CameraAiScreen(
             onClose = { viewModel.closeCamera() },
             onOpenGallery = {
                 viewModel.closeCamera()
-                viewModel.selectTab(StudioTab.GALLERY)
+                viewModel.selectTab(StudioTab.STUDIO)
             },
             latestPhoto = latestPhoto,
+            onEnhancePhoto = { photo ->
+                viewModel.enhanceSpecificPhoto(photo)
+            },
             modifier = modifier
         )
     } else {
@@ -215,10 +233,10 @@ fun CameraAiScreen(
                         StudioWorkspaceContent(
                             viewModel = viewModel,
                             latestPhoto = latestPhoto,
+                            dcimLazyPagingItems = dcimLazyPagingItems,
                             isServiceActive = isServiceActive,
                             isAutoProcessEnabled = isAutoProcessEnabled,
                             pendingQueueCount = pendingQueueCount,
-                            selectedPreset = selectedPreset,
                             enhancementState = enhancementState,
                             isShowingOriginal = isShowingOriginal,
                             isSaving = isSaving
@@ -232,6 +250,25 @@ fun CameraAiScreen(
                     }
                 }
             }
+        }
+    }
+
+    // Full Screen Overlay Preview & Enhance (Smooth, no window clipping, perfectly consistent)
+    AnimatedVisibility(
+        visible = previewPhoto != null,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 }),
+        exit = fadeOut()
+    ) {
+        val currentPreview = previewPhoto
+        if (currentPreview != null) {
+            UnifiedPhotoPreviewOverlay(
+                photo = currentPreview,
+                onDismiss = { viewModel.closePhotoPreview() },
+                onEnhance = { photo ->
+                    viewModel.enhanceSpecificPhoto(photo)
+                },
+                isFromCamera = false
+            )
         }
     }
 }
@@ -340,20 +377,32 @@ fun StudioBottomNavigationBar(
 fun StudioWorkspaceContent(
     viewModel: CameraAiViewModel,
     latestPhoto: CameraPhoto?,
+    dcimLazyPagingItems: LazyPagingItems<CameraPhoto>,
     isServiceActive: Boolean,
     isAutoProcessEnabled: Boolean,
     pendingQueueCount: Int,
-    selectedPreset: EnhancementPreset,
     enhancementState: EnhancementUiState,
     isShowingOriginal: Boolean,
     isSaving: Boolean
 ) {
     val context = LocalContext.current
+    val scrollState = rememberScrollState()
+
+    // On-demand pagination trigger: loads the next page only when the user scrolls near the bottom
+    LaunchedEffect(scrollState.value, scrollState.maxValue, dcimLazyPagingItems.itemCount) {
+        if (scrollState.maxValue > 0 && scrollState.value >= scrollState.maxValue - 250) {
+            val count = dcimLazyPagingItems.itemCount
+            if (count > 0 && dcimLazyPagingItems.loadState.append is LoadState.NotLoading) {
+                // Accessing the tail item on-demand requests the next page from Paging 3
+                dcimLazyPagingItems[count - 1]
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -361,7 +410,11 @@ fun StudioWorkspaceContent(
         BentoHeader(
             isServiceActive = isServiceActive,
             onToggleService = { viewModel.toggleBackgroundService() },
-            onRefresh = { viewModel.refreshLatestPhoto() }
+            onRefresh = {
+                viewModel.refreshLatestPhoto()
+                viewModel.refreshDcimPaging()
+                dcimLazyPagingItems.refresh()
+            }
         )
 
         // Auto-Process Toggle Bento Card
@@ -412,8 +465,8 @@ fun StudioWorkspaceContent(
             }
         }
 
-        // Main Hero Bento Card
-        if (latestPhoto != null) {
+        // Active Enhancement Result (Hero Before/After & AI Insights)
+        if (enhancementState is EnhancementUiState.Success && latestPhoto != null) {
             BentoHeroPhotoCard(
                 photo = latestPhoto,
                 enhancementState = enhancementState,
@@ -429,61 +482,43 @@ fun StudioWorkspaceContent(
                 }
             )
 
-            // Bento 2-Column Grid Row (Metadata & AI Enhance)
-            BentoActionGrid(
-                photo = latestPhoto,
-                enhancementState = enhancementState,
-                selectedPreset = selectedPreset,
-                onEnhance = { viewModel.enhancePhoto() }
-            )
+            BentoAiAnalysisCard(analysis = enhancementState.analysis)
 
-            // Error Card (Visible when Gemini API or network fails - no local fallbacks)
-            AnimatedVisibility(
-                visible = enhancementState is EnhancementUiState.Error,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut()
-            ) {
-                val error = enhancementState as? EnhancementUiState.Error
-                if (error != null) {
-                    BentoErrorCard(
-                        errorMessage = error.message,
-                        onRetry = { viewModel.enhancePhoto() },
-                        onDismiss = { viewModel.clearError() }
-                    )
-                }
-            }
-
-            // AI Scene Intelligence & Auto Remastering Bento Card
-            BentoAiSceneIntelligenceCard(
-                enhancementState = enhancementState
-            )
-
-            // AI Insights Card (Visible when enhancement succeeds)
-            AnimatedVisibility(
-                visible = enhancementState is EnhancementUiState.Success,
-                enter = fadeIn() + slideInVertically(),
-                exit = fadeOut()
-            ) {
-                val success = enhancementState as? EnhancementUiState.Success
-                if (success != null) {
-                    BentoAiAnalysisCard(analysis = success.analysis)
-                }
-            }
-
-            // Studio Action Controls (Save / Reset)
             StudioActionControls(
                 enhancementState = enhancementState,
                 isSaving = isSaving,
                 onSave = { viewModel.saveEnhancedPhoto() },
                 onReset = { viewModel.resetEnhancement() }
             )
-        } else {
-            EmptyCameraState(
-                onLoadSample = { viewModel.loadSamplePhoto() }
-            )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Error Card (Visible when Gemini API or network fails)
+        AnimatedVisibility(
+            visible = enhancementState is EnhancementUiState.Error,
+            enter = fadeIn() + slideInVertically(),
+            exit = fadeOut()
+        ) {
+            val error = enhancementState as? EnhancementUiState.Error
+            if (error != null) {
+                BentoErrorCard(
+                    errorMessage = error.message,
+                    onRetry = { viewModel.enhancePhoto() },
+                    onDismiss = { viewModel.clearError() }
+                )
+            }
+        }
+
+        // Paging 3 DCIM Photos Grid (Auto-loads next page on scroll inside the grid)
+        DcimPhotoPagingGrid(
+            pagingItems = dcimLazyPagingItems,
+            onPhotoClick = { photo -> viewModel.openPhotoPreview(photo) },
+            onLoadSample = {
+                viewModel.loadSamplePhoto()
+                dcimLazyPagingItems.refresh()
+            }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -597,7 +632,7 @@ fun BentoHeader(
     ) {
         Column {
             Text(
-                text = "Camera AI",
+                text = "Snapsense",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.5).sp,
@@ -905,207 +940,31 @@ fun BentoHeroPhotoCard(
 }
 
 @Composable
-fun BentoActionGrid(
-    photo: CameraPhoto,
-    enhancementState: EnhancementUiState,
-    selectedPreset: EnhancementPreset,
-    onEnhance: () -> Unit
+fun DcimPhotoPagingGrid(
+    pagingItems: LazyPagingItems<CameraPhoto>,
+    onPhotoClick: (CameraPhoto) -> Unit,
+    onLoadSample: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(170.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Tile 1: Metadata Bento Card (Enhanced with DCIM path badge and clean typography)
-        Card(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxSize()
-                .testTag("metadata_bento_card"),
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = BentoCardMeta)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.65f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = BentoTextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    // Native Camera Storage Pill
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (photo.isNativeCameraPath) Color(0xFFDCFCE7) else Color.White.copy(alpha = 0.8f),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (photo.isNativeCameraPath) Color(0xFF86EFAC) else BentoBorder
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(if (photo.isNativeCameraPath) BentoGreenActive else Color(0xFF94A3B8))
-                            )
-                            Text(
-                                text = if (photo.isNativeCameraPath) "DCIM" else "LOCAL",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (photo.isNativeCameraPath) Color(0xFF166534) else BentoTextSecondary
-                            )
-                        }
-                    }
-                }
-
-                Column {
-                    Text(
-                        text = "IMAGE METRICS",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                        color = BentoTextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = photo.resolutionText,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BentoTextPrimary
-                    )
-                    Text(
-                        text = "${photo.formattedSize} • ${photo.mimeType.substringAfterLast("/").uppercase()}",
-                        fontSize = 11.sp,
-                        color = BentoTextSecondary
-                    )
-                }
-            }
-        }
-
-        // Tile 2: AI Enhance Action Bento Card
-        val isError = enhancementState is EnhancementUiState.Error
-        val cardBg = if (isError) Color(0xFFFFECEC) else BentoCardAiBlue
-        val iconBg = if (isError) Color(0xFFD32F2F) else BentoAiBluePrimary
-
-        Card(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxSize()
-                .clickable(enabled = enhancementState !is EnhancementUiState.Processing) {
-                    onEnhance()
-                }
-                .testTag("ai_enhance_bento_card"),
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = cardBg)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(iconBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (enhancementState is EnhancementUiState.Processing) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            strokeWidth = 2.5.dp,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else if (isError) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Retry",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = when (enhancementState) {
-                        is EnhancementUiState.Success -> "Re-Enhance"
-                        is EnhancementUiState.Error -> "Retry AI"
-                        else -> "Auto Enhance"
-                    },
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isError) Color(0xFFD32F2F) else BentoAiBlueText
-                )
-
-                Text(
-                    text = if (isError) "Tap to retry" else "Auto LLM Detection",
-                    fontSize = 11.sp,
-                    color = if (isError) Color(0xFFD32F2F).copy(alpha = 0.8f) else BentoAiBlueText.copy(alpha = 0.7f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun BentoAiSceneIntelligenceCard(
-    enhancementState: EnhancementUiState
-) {
-    val detectedCategory = when (enhancementState) {
-        is EnhancementUiState.Success -> enhancementState.analysis.category
-        is EnhancementUiState.Processing -> enhancementState.detectedScene
-        else -> null
-    }
+    val totalLoaded = pagingItems.itemCount
+    val refreshState = pagingItems.loadState.refresh
+    val appendState = pagingItems.loadState.append
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .testTag("ai_scene_intelligence_card"),
+            .testTag("dcim_photos_card"),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1113,83 +972,582 @@ fun BentoAiSceneIntelligenceCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
                             .background(BentoPurpleContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AutoAwesome,
+                            imageVector = Icons.Default.Collections,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = BentoPurpleDark
+                            tint = BentoPurplePrimary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    Text(
-                        text = "Auto Scene Detection Engine",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BentoTextPrimary
-                    )
+
+                    Column {
+                        Text(
+                            text = "DCIM Camera Photos",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoTextPrimary
+                        )
+                        Text(
+                            text = if (totalLoaded > 0) "$totalLoaded photo${if (totalLoaded == 1) "" else "s"} loaded via Paging 3" else "Paging 3 DCIM Gallery",
+                            fontSize = 11.sp,
+                            color = BentoTextSecondary
+                        )
+                    }
                 }
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFEDE7F6)
+                    color = BentoPurpleContainer,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary.copy(alpha = 0.2f))
                 ) {
-                    Text(
-                        text = "GEMINI LLM",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF673AB7),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (appendState is LoadState.Loading || refreshState is LoadState.Loading) {
+                            CircularProgressIndicator(
+                                strokeWidth = 1.5.dp,
+                                color = BentoPurplePrimary,
+                                modifier = Modifier.size(10.dp)
+                            )
+                        }
+                        Text(
+                            text = "$totalLoaded loaded",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BentoPurplePrimary
+                        )
+                    }
                 }
             }
 
-            Text(
-                text = "Gemini AI analyzes the image to classify scenes (Portrait, Low Light, Food, Texture, Landscape, Architecture, etc.) and auto-applies tailored 4K restoration.",
-                fontSize = 12.sp,
-                color = BentoTextSecondary,
-                lineHeight = 17.sp
-            )
-
-            // Intelligent Scene Capability Chips
-            val scenes = listOf(
-                "👤 Portrait",
-                "🌙 Low Light",
-                "🍽️ Food",
-                "🔍 Texture",
-                "🌿 Landscape",
-                "🏙️ Architecture",
-                "📄 Document"
-            )
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(scenes) { sceneTag ->
-                    val isMatched = detectedCategory != null && sceneTag.contains(detectedCategory.name.take(4), ignoreCase = true)
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isMatched) BentoPurpleContainer else BentoCardMuted,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (isMatched) BentoPurplePrimary else Color.Transparent
+            if (refreshState is LoadState.Loading && totalLoaded == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.5.dp,
+                            color = BentoPurplePrimary,
+                            modifier = Modifier.size(28.dp)
                         )
+                        Text(
+                            text = "Loading DCIM gallery with Paging 3…",
+                            fontSize = 12.sp,
+                            color = BentoTextSecondary
+                        )
+                    }
+                }
+            } else if (refreshState is LoadState.Error && totalLoaded == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = sceneTag,
-                            fontSize = 11.sp,
-                            fontWeight = if (isMatched) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isMatched) BentoPurpleDark else BentoTextSecondary,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            text = "Failed to load photos",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFE53935)
                         )
+                        FilledTonalButton(
+                            onClick = { pagingItems.retry() },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Retry", fontSize = 12.sp)
+                        }
+                    }
+                }
+            } else if (totalLoaded == 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Collections,
+                            contentDescription = null,
+                            tint = BentoTextSecondary.copy(alpha = 0.5f),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Text(
+                            text = "No photos in DCIM folder",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = BentoTextSecondary
+                        )
+                        FilledTonalButton(
+                            onClick = onLoadSample,
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoCardAiBlue)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = BentoAiBluePrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Load Demo Photo", color = BentoAiBlueText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            } else {
+                // Responsive 2-column Grid of Photos from Paging 3
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val indices = (0 until totalLoaded).chunked(2)
+                    indices.forEach { rowIndices ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            rowIndices.forEach { index ->
+                                val photo = pagingItems[index]
+                                if (photo != null) {
+                                    DcimPhotoGridItem(
+                                        photo = photo,
+                                        onClick = { onPhotoClick(photo) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                            if (rowIndices.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                // Paging 3 Dynamic Append Loading Indicator
+                when (appendState) {
+                    is LoadState.Loading -> {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .testTag("dcim_load_more_indicator"),
+                            color = BentoPurpleContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary.copy(alpha = 0.25f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp, horizontal = 14.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    color = BentoPurplePrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Paging 3 loading more photos…",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = BentoPurplePrimary
+                                )
+                            }
+                        }
+                    }
+                    is LoadState.Error -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Error loading next page",
+                                fontSize = 12.sp,
+                                color = Color(0xFFE53935)
+                            )
+                            TextButton(onClick = { pagingItems.retry() }) {
+                                Text("Retry", fontSize = 12.sp, color = BentoPurplePrimary)
+                            }
+                        }
+                    }
+                    is LoadState.NotLoading -> {
+                        if (appendState.endOfPaginationReached && totalLoaded > 4) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "✓ All $totalLoaded photos loaded",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = BentoTextSecondary
+                                )
+                            }
+                        } else if (!appendState.endOfPaginationReached && totalLoaded >= 10) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        if (totalLoaded > 0) {
+                                            pagingItems[totalLoaded - 1]
+                                        }
+                                    },
+                                color = BentoPurpleContainer.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 12.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = BentoPurplePrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Scroll down to load next page on-demand",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = BentoPurplePrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DcimPhotoGridItem(
+    photo: CameraPhoto,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .aspectRatio(0.85f)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+            .testTag("dcim_grid_item_${photo.id}"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = photo.uri,
+                contentDescription = photo.displayName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Top gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
+                        )
+                    )
+            )
+
+            // Bottom gradient overlay with metadata
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                        )
+                    )
+                    .padding(8.dp)
+            ) {
+                Column {
+                    Text(
+                        text = photo.displayName,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = photo.resolutionText,
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = photo.formattedSize,
+                            fontSize = 10.sp,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UnifiedPhotoPreviewOverlay(
+    photo: CameraPhoto,
+    onDismiss: () -> Unit,
+    onEnhance: (CameraPhoto) -> Unit,
+    isFromCamera: Boolean = false,
+    onOpenStudio: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.96f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { /* consume background taps */ }
+            .testTag(if (isFromCamera) "camera_thumbnail_preview_overlay" else "dcim_photo_preview_dialog")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            // Top Action Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .testTag(if (isFromCamera) "close_preview_overlay_button" else "close_preview_dialog_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp)
+                ) {
+                    Text(
+                        text = photo.displayName,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${photo.resolutionText} • ${photo.formattedSize}",
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 11.sp
+                    )
+                }
+
+                if (isFromCamera && onOpenStudio != null) {
+                    IconButton(
+                        onClick = onOpenStudio,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .testTag("preview_open_studio_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Open Studio Gallery",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = { shareUri(context, photo.uri) },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .testTag("preview_dialog_share_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Image Preview (Takes weight(1f), perfectly scaled, never pushes bottom bar out of view)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = photo.uri,
+                    contentDescription = photo.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
+            // Bottom Actions Card (Guaranteed on-screen above system navigation bar)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = Color(0xFF1E1E24).copy(alpha = 0.95f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Storage: ${photo.relativePath}",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = BentoPurplePrimary.copy(alpha = 0.3f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary)
+                        ) {
+                            Text(
+                                text = "GEMINI REMASTER",
+                                color = Color(0xFFC084FC),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                onEnhance(photo)
+                                onDismiss()
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag(if (isFromCamera) "preview_enhance_button" else "modal_enhance_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BentoPurplePrimary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Enhance with Gemini AI",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .height(48.dp)
+                                .testTag(if (isFromCamera) "preview_resume_camera_button" else "modal_dismiss_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = if (isFromCamera) "Resume Camera" else "Close",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
@@ -1552,7 +1910,7 @@ fun EmptyCameraState(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Tap the floating camera button below to snap a photo in-app. Camera AI will automatically process and enhance it with Gemini AI.",
+                    text = "Tap the floating camera button below to snap a photo in-app. Snapsense will automatically process and enhance it with Gemini AI.",
                     fontSize = 13.sp,
                     color = BentoTextSecondary,
                     textAlign = TextAlign.Center,

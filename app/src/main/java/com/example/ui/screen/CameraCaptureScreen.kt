@@ -61,8 +61,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -75,6 +77,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -149,6 +152,7 @@ fun CameraCaptureScreen(
     onClose: () -> Unit,
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
+    onEnhancePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
@@ -159,6 +163,7 @@ fun CameraCaptureScreen(
             onClose = onClose,
             onOpenGallery = onOpenGallery,
             latestPhoto = latestPhoto,
+            onEnhancePhoto = onEnhancePhoto,
             modifier = modifier
         )
     } else {
@@ -176,6 +181,7 @@ private fun CameraViewContent(
     onClose: () -> Unit,
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
+    onEnhancePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -191,6 +197,7 @@ private fun CameraViewContent(
     var showGrid by remember { mutableStateOf(true) }
     var isCapturing by remember { mutableStateOf(false) }
     var flashScreenEffect by remember { mutableStateOf(false) }
+    var showThumbnailPreview by remember { mutableStateOf(false) }
 
     // Zoom state
     var currentZoomRatio by remember { mutableFloatStateOf(1.0f) }
@@ -414,12 +421,8 @@ private fun CameraViewContent(
                         )
                     }
 
-                    // Vertical Draggable Exposure Control beside the focus reticle
-                    val evValue = exposureIndex * exposureStep
-                    val evText = if (evValue > 0) String.format(Locale.US, "+%.1f", evValue)
-                    else String.format(Locale.US, "%.1f", evValue)
-
-                    val trackHeightDp = 100.dp
+                    // Minimalist Single Vertical Draggable Exposure Slider beside the focus reticle
+                    val trackHeightDp = 110.dp
                     val trackHeightPx = with(density) { trackHeightDp.toPx() }
                     val rangeSpan = (maxExposureIndex - minExposureIndex).coerceAtLeast(1)
                     val progress = ((exposureIndex - minExposureIndex).toFloat() / rangeSpan.toFloat()).coerceIn(0f, 1f)
@@ -428,131 +431,92 @@ private fun CameraViewContent(
                     Box(
                         modifier = Modifier
                             .offset {
-                                val sliderX = (point.x + with(density) { 46.dp.toPx() })
+                                val sliderX = (point.x + with(density) { 42.dp.toPx() })
                                     .coerceIn(
-                                        with(density) { 16.dp.toPx() },
-                                        with(density) { 300.dp.toPx() }
+                                        with(density) { 12.dp.toPx() },
+                                        with(density) { 320.dp.toPx() }
                                     )
-                                val sliderY = (point.y - with(density) { 65.dp.toPx() })
+                                val sliderY = (point.y - with(density) { 55.dp.toPx() })
                                     .coerceIn(
                                         with(density) { 20.dp.toPx() },
                                         with(density) { 420.dp.toPx() }
                                     )
                                 IntOffset(sliderX.roundToInt(), sliderY.roundToInt())
                             }
-                            .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(20.dp))
-                            .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.45f), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 10.dp, vertical = 10.dp)
-                            .pointerInput(exposureIndex, minExposureIndex, maxExposureIndex) {
+                            .width(44.dp)
+                            .height(trackHeightDp)
+                            .pointerInput(minExposureIndex, maxExposureIndex) {
                                 detectDragGestures(
-                                    onDragStart = {
-                                        dragAccumulator = 0f
+                                    onDragStart = { offset ->
                                         restartDismissTimer()
+                                        val frac = 1f - (offset.y / trackHeightPx).coerceIn(0f, 1f)
+                                        val newIndex = (minExposureIndex + frac * rangeSpan).roundToInt()
+                                        setExposure(newIndex)
                                     },
-                                    onDrag = { change, dragAmount ->
+                                    onDrag = { change, _ ->
                                         change.consume()
                                         restartDismissTimer()
-                                        dragAccumulator -= dragAmount.y
-                                        val threshold = 18f
-                                        if (dragAccumulator >= threshold) {
-                                            val steps = (dragAccumulator / threshold).toInt()
-                                            setExposure(exposureIndex + steps)
-                                            dragAccumulator -= (steps * threshold)
-                                        } else if (dragAccumulator <= -threshold) {
-                                            val steps = ((-dragAccumulator) / threshold).toInt()
-                                            setExposure(exposureIndex - steps)
-                                            dragAccumulator += (steps * threshold)
-                                        }
+                                        val touchY = change.position.y
+                                        val frac = 1f - (touchY / trackHeightPx).coerceIn(0f, 1f)
+                                        val newIndex = (minExposureIndex + frac * rangeSpan).roundToInt()
+                                        setExposure(newIndex)
                                     },
                                     onDragEnd = {
-                                        dragAccumulator = 0f
                                         restartDismissTimer()
                                     },
                                     onDragCancel = {
-                                        dragAccumulator = 0f
                                         restartDismissTimer()
                                     }
                                 )
                             }
                             .testTag("focus_draggable_exposure_slider"),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.TopCenter
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        // Background Track Line with Center Tick
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(3.dp)
+                                .align(Alignment.Center)
                         ) {
-                            // EV Value Badge
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (exposureIndex != 0) Color(0xFFFFD700) else Color.White.copy(alpha = 0.2f),
-                                modifier = Modifier.clickable {
-                                    setExposure(0)
-                                    restartDismissTimer()
-                                }
-                            ) {
-                                Text(
-                                    text = "${evText} EV",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (exposureIndex != 0) Color.Black else Color.White,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                )
-                            }
+                            // Dark subtle backdrop line for high contrast
+                            drawRoundRect(
+                                color = Color.Black.copy(alpha = 0.35f),
+                                size = androidx.compose.ui.geometry.Size(size.width + 2.dp.toPx(), size.height),
+                                topLeft = Offset(-1.dp.toPx(), 0f),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
+                            )
+                            // White track line
+                            drawRoundRect(
+                                color = Color.White.copy(alpha = 0.75f),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
+                            )
+                            // Zero/Center Mark
+                            val zeroProgress = (-minExposureIndex).toFloat() / rangeSpan.toFloat()
+                            val zeroY = size.height * (1f - zeroProgress)
+                            drawLine(
+                                color = Color.White,
+                                start = Offset(-5.dp.toPx(), zeroY),
+                                end = Offset(size.width + 5.dp.toPx(), zeroY),
+                                strokeWidth = 2.dp.toPx()
+                            )
+                        }
 
-                            // Interactive Draggable Vertical Track
-                            Box(
-                                modifier = Modifier
-                                    .width(28.dp)
-                                    .height(trackHeightDp),
-                                contentAlignment = Alignment.TopCenter
-                            ) {
-                                // Background Track Line
-                                Canvas(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(3.dp)
-                                        .align(Alignment.Center)
-                                ) {
-                                    drawRoundRect(
-                                        color = Color.White.copy(alpha = 0.35f),
-                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
-                                    )
-                                    // Zero/Center Mark
-                                    val zeroProgress = (-minExposureIndex).toFloat() / rangeSpan.toFloat()
-                                    val zeroY = size.height * (1f - zeroProgress)
-                                    drawLine(
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        start = Offset(-4.dp.toPx(), zeroY),
-                                        end = Offset(size.width + 4.dp.toPx(), zeroY),
-                                        strokeWidth = 1.5.dp.toPx()
-                                    )
-                                }
-
-                                // Glowing Sun Handle Thumb on Track
-                                Box(
-                                    modifier = Modifier
-                                        .offset(y = (thumbOffsetYDp - 14.dp).coerceIn(0.dp, trackHeightDp - 28.dp))
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFFFD700))
-                                        .border(1.5.dp, Color.White, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.WbSunny,
-                                        contentDescription = "Exposure Slider Handle",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            // Hint label
-                            Text(
-                                text = "DRAG",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.6f)
+                        // Luminous Sun Handle Thumb on Single Slider Track
+                        Box(
+                            modifier = Modifier
+                                .offset(y = (thumbOffsetYDp - 13.dp).coerceIn(0.dp, trackHeightDp - 26.dp))
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFD700))
+                                .border(1.5.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WbSunny,
+                                contentDescription = "Exposure Slider Handle",
+                                tint = Color.Black,
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -782,7 +746,13 @@ private fun CameraViewContent(
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White.copy(alpha = 0.15f))
                         .border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                        .clickable { onOpenGallery() }
+                        .clickable {
+                            if (latestPhoto != null) {
+                                showThumbnailPreview = true
+                            } else {
+                                onOpenGallery()
+                            }
+                        }
                         .testTag("camera_gallery_thumbnail"),
                     contentAlignment = Alignment.Center
                 ) {
@@ -876,6 +846,219 @@ private fun CameraViewContent(
                     .fillMaxSize()
                     .background(Color.White.copy(alpha = 0.85f))
             )
+        }
+
+        // Full Screen Thumbnail Preview Overlay
+        AnimatedVisibility(
+            visible = showThumbnailPreview && latestPhoto != null,
+            enter = fadeIn(animationSpec = tween(150)),
+            exit = fadeOut(animationSpec = tween(150))
+        ) {
+            if (latestPhoto != null) {
+                CameraThumbnailPreviewOverlay(
+                    photo = latestPhoto,
+                    onDismiss = { showThumbnailPreview = false },
+                    onEnhance = {
+                        onEnhancePhoto(latestPhoto)
+                        showThumbnailPreview = false
+                    },
+                    onOpenStudio = {
+                        showThumbnailPreview = false
+                        onClose()
+                        onOpenGallery()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CameraThumbnailPreviewOverlay(
+    photo: CameraPhoto,
+    onDismiss: () -> Unit,
+    onEnhance: () -> Unit,
+    onOpenStudio: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.96f))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { /* swallow taps */ }
+            .testTag("camera_thumbnail_preview_overlay")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            // Top Action Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .testTag("close_preview_overlay_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Preview",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp)
+                ) {
+                    Text(
+                        text = photo.displayName,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${photo.resolutionText} • ${photo.formattedSize}",
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 11.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = onOpenStudio,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f))
+                        .testTag("preview_open_studio_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoLibrary,
+                        contentDescription = "Open Gallery/Studio",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // High Resolution Center Image (Takes weight(1f), never pushes bottom card off screen)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = photo.uri,
+                    contentDescription = photo.displayName,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+            }
+
+            // Bottom Details & Action Card (Guaranteed on-screen above system navigation bar)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = Color(0xFF1E1E24).copy(alpha = 0.95f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${photo.formattedSize} • ${photo.mimeType.substringAfterLast("/").uppercase()}",
+                            color = Color.White.copy(alpha = 0.75f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF10B981).copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
+                        ) {
+                            Text(
+                                text = "DCIM CAMERA",
+                                color = Color(0xFF34D399),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = onEnhance,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .testTag("preview_enhance_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = BentoPurplePrimary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Enhance with Gemini AI",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .height(48.dp)
+                                .testTag("preview_resume_camera_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        ) {
+                            Text("Resume Camera", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
         }
     }
 }

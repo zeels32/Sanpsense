@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Camera AI"
+rootProject.name = "Snapsense"
 
 include(":app")

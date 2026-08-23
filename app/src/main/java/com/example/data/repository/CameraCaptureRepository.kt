@@ -135,6 +135,83 @@ class CameraCaptureRepository(private val context: Context) {
         }
     }
 
+    suspend fun queryAllDcimPhotos(): List<CameraPhoto> = withContext(Dispatchers.IO) {
+        try {
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_TAKEN,
+                MediaStore.Images.Media.DATE_ADDED,
+                MediaStore.Images.Media.SIZE,
+                MediaStore.Images.Media.WIDTH,
+                MediaStore.Images.Media.HEIGHT,
+                MediaStore.Images.Media.MIME_TYPE,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Images.Media.RELATIVE_PATH
+                } else {
+                    MediaStore.Images.Media.DATA
+                },
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+                } else {
+                    MediaStore.Images.Media.DATA
+                }
+            )
+
+            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+            val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "(${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?) " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ? " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ?"
+            } else {
+                "(${MediaStore.Images.Media.DATA} LIKE ? OR ${MediaStore.Images.Media.DATA} LIKE ?) " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ? " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ?"
+            }
+            val selectionArgs = arrayOf("%DCIM%", "%Camera%", "AI_Enhanced_%", "AI_%")
+
+            val list = mutableListOf<CameraPhoto>()
+            contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                sortOrder
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val candidate = cursorToPhoto(cursor)
+                    if (candidate.isNativeCameraPath &&
+                        !candidate.isEnhancedImage &&
+                        !knownEnhancedUris.contains(candidate.uri) &&
+                        !knownEnhancedIds.contains(candidate.id) &&
+                        !knownEnhancedNames.contains(candidate.displayName)
+                    ) {
+                        list.add(candidate)
+                    }
+                }
+            }
+            list
+        } catch (e: Exception) {
+            Log.e("CameraRepository", "Error querying all DCIM photos", e)
+            emptyList()
+        }
+    }
+
+    suspend fun queryDcimPhotosPaged(offset: Int, limit: Int): List<CameraPhoto> = withContext(Dispatchers.IO) {
+        try {
+            val allPhotos = queryAllDcimPhotos()
+            if (offset >= allPhotos.size) {
+                emptyList()
+            } else {
+                allPhotos.drop(offset).take(limit)
+            }
+        } catch (e: Exception) {
+            Log.e("CameraRepository", "Error querying paged DCIM photos", e)
+            emptyList()
+        }
+    }
+
     private fun cursorToPhoto(cursor: android.database.Cursor): CameraPhoto {
         val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
         val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
