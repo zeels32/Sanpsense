@@ -8,6 +8,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -15,15 +16,20 @@ private val DarkColorScheme =
   darkColorScheme(
     primary = BentoPurpleLight,
     onPrimary = BentoPurpleDark,
-    primaryContainer = BentoPurpleText,
-    onPrimaryContainer = BentoPurpleContainer,
-    secondary = BentoCardAiBlue,
-    onSecondary = BentoAiBlueText,
-    background = Color(0xFF141218),
-    surface = Color(0xFF1D1B20),
-    surfaceVariant = Color(0xFF2B2930),
-    onSurface = Color(0xFFE6E1E5),
-    onSurfaceVariant = Color(0xFFCAC4D0)
+    primaryContainer = Color(0xFF381E72),
+    onPrimaryContainer = BentoPurpleLight,
+    secondary = BentoAiBlueLight,
+    onSecondary = Color(0xFF003258),
+    secondaryContainer = Color(0xFF172554),
+    onSecondaryContainer = Color(0xFFBFDBFE),
+    background = BentoBgDark,
+    onBackground = BentoTextPrimaryDark,
+    surface = BentoSurfaceDark,
+    onSurface = BentoTextPrimaryDark,
+    surfaceVariant = BentoCardMutedDark,
+    onSurfaceVariant = BentoTextSecondaryDark,
+    outline = BentoBorderDark,
+    outlineVariant = Color(0xFF282834)
   )
 
 private val LightColorScheme =
@@ -37,19 +43,20 @@ private val LightColorScheme =
     secondaryContainer = BentoCardAiBlue,
     onSecondaryContainer = BentoAiBlueText,
     background = BentoBgLight,
+    onBackground = BentoTextPrimaryLight,
     surface = BentoSurfaceLight,
-    surfaceVariant = BentoCardMuted,
-    onBackground = BentoTextPrimary,
-    onSurface = BentoTextPrimary,
-    onSurfaceVariant = BentoTextSecondary,
-    outline = BentoBorder
+    onSurface = BentoTextPrimaryLight,
+    surfaceVariant = BentoCardMutedLight,
+    onSurfaceVariant = BentoTextSecondaryLight,
+    outline = BentoBorderLight,
+    outlineVariant = Color(0xFFEDE8EC)
   )
 
 @Composable
 fun MyApplicationTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
   // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -58,10 +65,14 @@ fun MyApplicationTheme(
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-
       darkTheme -> DarkColorScheme
       else -> LightColorScheme
     }
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  val bentoColors = if (darkTheme) BentoDarkColors else BentoLightColors
+
+  CompositionLocalProvider(LocalBentoColors provides bentoColors) {
+    MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  }
 }
+

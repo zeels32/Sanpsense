@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -21,6 +22,7 @@ import com.example.data.model.CameraPhoto
 import com.example.data.model.EnhancementPreset
 import com.example.data.model.EnhancementQueueItem
 import com.example.data.model.EnhancementUiState
+import com.example.data.model.ThemeMode
 import com.example.data.paging.DcimPagingSource
 import com.example.data.repository.AiQueueManager
 import com.example.data.repository.CameraCaptureRepository
@@ -43,10 +45,23 @@ enum class StudioTab {
 
 class CameraAiViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = application.getSharedPreferences("snapsense_prefs", Context.MODE_PRIVATE)
+
     private val repository = CameraCaptureRepository.getInstance(application)
     private val queueManager = AiQueueManager.getInstance(application)
     private val database = AppDatabase.getDatabase(application)
     private val dao = database.enhancedPhotoDao()
+
+    // Theme Mode Selection (Default: SYSTEM)
+    private val _themeMode = MutableStateFlow(
+        ThemeMode.fromString(prefs.getString("app_theme_mode", ThemeMode.SYSTEM.name))
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString("app_theme_mode", mode.name).apply()
+    }
 
     val latestPhoto: StateFlow<CameraPhoto?> = repository.latestPhoto
     val isServiceActive: StateFlow<Boolean> = repository.isServiceActive
@@ -96,10 +111,10 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
         .flatMapLatest {
             Pager(
                 config = PagingConfig(
-                    pageSize = 10,
+                    pageSize = 20,
                     enablePlaceholders = false,
-                    prefetchDistance = 0, // Disable prefetch so next page loads strictly on-demand when user scrolls
-                    initialLoadSize = 10
+                    prefetchDistance = 20, // Disable prefetch so next page loads strictly on-demand when user scrolls
+                    initialLoadSize = 20
                 ),
                 pagingSourceFactory = { DcimPagingSource(repository) }
             ).flow

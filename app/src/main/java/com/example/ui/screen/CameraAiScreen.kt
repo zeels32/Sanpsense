@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,20 +40,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Compare
-import androidx.paging.LoadState
-import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Hd
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Queue
@@ -84,6 +87,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -95,7 +100,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,6 +123,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.R
@@ -124,21 +134,8 @@ import com.example.data.model.CameraPhoto
 import com.example.data.model.EnhancementPreset
 import com.example.data.model.EnhancementUiState
 import com.example.data.model.QueueItemStatus
-import com.example.ui.theme.BentoAiBluePrimary
-import com.example.ui.theme.BentoAiBlueText
-import com.example.ui.theme.BentoBgLight
-import com.example.ui.theme.BentoBorder
-import com.example.ui.theme.BentoCardAiBlue
-import com.example.ui.theme.BentoCardMeta
-import com.example.ui.theme.BentoCardMuted
-import com.example.ui.theme.BentoGreenActive
-import com.example.ui.theme.BentoPurpleContainer
-import com.example.ui.theme.BentoPurpleDark
-import com.example.ui.theme.BentoPurpleLight
-import com.example.ui.theme.BentoPurplePrimary
-import com.example.ui.theme.BentoPurpleText
-import com.example.ui.theme.BentoTextPrimary
-import com.example.ui.theme.BentoTextSecondary
+import com.example.data.model.ThemeMode
+import com.example.ui.theme.BentoTheme
 import com.example.ui.viewmodel.CameraAiViewModel
 import com.example.ui.viewmodel.StudioTab
 
@@ -164,7 +161,10 @@ fun CameraAiScreen(
     val saveStatusMessage by viewModel.saveStatusMessage.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
     val previewPhoto by viewModel.previewPhoto.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val dcimLazyPagingItems = viewModel.dcimPagingFlow.collectAsLazyPagingItems()
+
+    var showThemeDialog by remember { mutableStateOf(false) }
 
     val pendingQueueCount = queueItems.count { it.status is QueueItemStatus.Pending || it.status is QueueItemStatus.InProgress }
 
@@ -173,6 +173,17 @@ fun CameraAiScreen(
             snackbarHostState.showSnackbar(msg)
             viewModel.clearSaveStatus()
         }
+    }
+
+    if (showThemeDialog) {
+        ThemeSelectionDialog(
+            currentMode = themeMode,
+            onSelectMode = { mode ->
+                viewModel.setThemeMode(mode)
+                showThemeDialog = false
+            },
+            onDismiss = { showThemeDialog = false }
+        )
     }
 
     if (isCameraOpen) {
@@ -193,13 +204,13 @@ fun CameraAiScreen(
         Scaffold(
             modifier = modifier
                 .fillMaxSize()
-                .background(BentoBgLight),
-            containerColor = BentoBgLight,
+                .background(BentoTheme.colors.bg),
+            containerColor = BentoTheme.colors.bg,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = { viewModel.openCamera() },
-                    containerColor = BentoPurplePrimary,
+                    containerColor = BentoTheme.colors.purplePrimary,
                     contentColor = Color.White,
                     shape = CircleShape,
                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
@@ -239,7 +250,9 @@ fun CameraAiScreen(
                             pendingQueueCount = pendingQueueCount,
                             enhancementState = enhancementState,
                             isShowingOriginal = isShowingOriginal,
-                            isSaving = isSaving
+                            isSaving = isSaving,
+                            themeMode = themeMode,
+                            onOpenThemeDialog = { showThemeDialog = true }
                         )
                     }
                     StudioTab.GALLERY -> {
@@ -281,11 +294,11 @@ fun StudioBottomNavigationBar(
     onSelectTab: (StudioTab) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color.White,
+        containerColor = BentoTheme.colors.cardBg,
         tonalElevation = 8.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, BentoBorder)
+            .border(1.dp, BentoTheme.colors.border)
             .testTag("main_bottom_nav")
     ) {
         NavigationBarItem(
@@ -300,11 +313,11 @@ fun StudioBottomNavigationBar(
             },
             label = { Text("Studio", fontWeight = if (currentTab == StudioTab.STUDIO) FontWeight.Bold else FontWeight.Normal) },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = BentoPurplePrimary,
-                selectedTextColor = BentoPurplePrimary,
-                indicatorColor = BentoPurpleContainer,
-                unselectedIconColor = BentoTextSecondary,
-                unselectedTextColor = BentoTextSecondary
+                selectedIconColor = BentoTheme.colors.purplePrimary,
+                selectedTextColor = BentoTheme.colors.purplePrimary,
+                indicatorColor = BentoTheme.colors.purpleContainer,
+                unselectedIconColor = BentoTheme.colors.textSecondary,
+                unselectedTextColor = BentoTheme.colors.textSecondary
             ),
             modifier = Modifier.testTag("nav_tab_studio")
         )
@@ -316,7 +329,7 @@ fun StudioBottomNavigationBar(
                 BadgedBox(
                     badge = {
                         if (galleryCount > 0) {
-                            Badge(containerColor = BentoPurplePrimary) {
+                            Badge(containerColor = BentoTheme.colors.purplePrimary) {
                                 Text(galleryCount.toString(), color = Color.White, fontSize = 10.sp)
                             }
                         }
@@ -331,11 +344,11 @@ fun StudioBottomNavigationBar(
             },
             label = { Text("AI Gallery", fontWeight = if (currentTab == StudioTab.GALLERY) FontWeight.Bold else FontWeight.Normal) },
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = BentoPurplePrimary,
-                selectedTextColor = BentoPurplePrimary,
-                indicatorColor = BentoPurpleContainer,
-                unselectedIconColor = BentoTextSecondary,
-                unselectedTextColor = BentoTextSecondary
+                selectedIconColor = BentoTheme.colors.purplePrimary,
+                selectedTextColor = BentoTheme.colors.purplePrimary,
+                indicatorColor = BentoTheme.colors.purpleContainer,
+                unselectedIconColor = BentoTheme.colors.textSecondary,
+                unselectedTextColor = BentoTheme.colors.textSecondary
             ),
             modifier = Modifier.testTag("nav_tab_gallery")
         )
@@ -365,8 +378,8 @@ fun StudioBottomNavigationBar(
                 selectedIconColor = Color(0xFF0288D1),
                 selectedTextColor = Color(0xFF0288D1),
                 indicatorColor = Color(0xFFE0F2FE),
-                unselectedIconColor = BentoTextSecondary,
-                unselectedTextColor = BentoTextSecondary
+                unselectedIconColor = BentoTheme.colors.textSecondary,
+                unselectedTextColor = BentoTheme.colors.textSecondary
             ),
             modifier = Modifier.testTag("nav_tab_queue")
         )
@@ -383,7 +396,9 @@ fun StudioWorkspaceContent(
     pendingQueueCount: Int,
     enhancementState: EnhancementUiState,
     isShowingOriginal: Boolean,
-    isSaving: Boolean
+    isSaving: Boolean,
+    themeMode: ThemeMode,
+    onOpenThemeDialog: () -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -409,7 +424,9 @@ fun StudioWorkspaceContent(
         // Bento Header Section
         BentoHeader(
             isServiceActive = isServiceActive,
+            themeMode = themeMode,
             onToggleService = { viewModel.toggleBackgroundService() },
+            onOpenThemeDialog = onOpenThemeDialog,
             onRefresh = {
                 viewModel.refreshLatestPhoto()
                 viewModel.refreshDcimPaging()
@@ -431,8 +448,8 @@ fun StudioWorkspaceContent(
                     .clickable { viewModel.selectTab(StudioTab.QUEUE) }
                     .testTag("active_queue_banner"),
                 shape = RoundedCornerShape(18.dp),
-                color = Color(0xFFE0F2FE),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBAE6FD))
+                color = Color(0xFF0288D1).copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0288D1).copy(alpha = 0.3f))
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -452,7 +469,7 @@ fun StudioWorkspaceContent(
                             text = "$pendingQueueCount photo${if (pendingQueueCount > 1) "s" else ""} processing in AI Queue…",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF0369A1)
+                            color = BentoTheme.colors.textPrimary
                         )
                     }
                     Text(
@@ -533,11 +550,11 @@ fun AutoProcessToggleCard(
             .testTag("auto_process_card"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isAutoProcessEnabled) Color(0xFFF3E8FF) else Color.White
+            containerColor = if (isAutoProcessEnabled) BentoTheme.colors.purpleContainer.copy(alpha = 0.5f) else BentoTheme.colors.cardBg
         ),
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isAutoProcessEnabled) BentoPurplePrimary.copy(alpha = 0.4f) else BentoBorder
+            if (isAutoProcessEnabled) BentoTheme.colors.purplePrimary.copy(alpha = 0.4f) else BentoTheme.colors.border
         )
     ) {
         Row(
@@ -556,13 +573,13 @@ fun AutoProcessToggleCard(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(if (isAutoProcessEnabled) BentoPurplePrimary else Color(0xFFF1F5F9)),
+                        .background(if (isAutoProcessEnabled) BentoTheme.colors.purplePrimary else BentoTheme.colors.cardMuted),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = null,
-                        tint = if (isAutoProcessEnabled) Color.White else Color(0xFF64748B),
+                        tint = if (isAutoProcessEnabled) Color.White else BentoTheme.colors.textSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -576,17 +593,17 @@ fun AutoProcessToggleCard(
                             text = stringResource(R.string.auto_process_title),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = BentoTextPrimary
+                            color = BentoTheme.colors.textPrimary
                         )
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = if (isAutoProcessEnabled) BentoPurplePrimary else Color(0xFFE2E8F0)
+                            color = if (isAutoProcessEnabled) BentoTheme.colors.purplePrimary else BentoTheme.colors.cardMuted
                         ) {
                             Text(
                                 text = if (isAutoProcessEnabled) "DCIM ACTIVE" else "DCIM ONLY",
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (isAutoProcessEnabled) Color.White else Color(0xFF475569),
+                                color = if (isAutoProcessEnabled) Color.White else BentoTheme.colors.textSecondary,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -594,7 +611,7 @@ fun AutoProcessToggleCard(
                     Text(
                         text = "Auto-enhances with Gemini 3.1 Flash Image for photos captured in native DCIM camera",
                         fontSize = 11.sp,
-                        color = BentoTextSecondary,
+                        color = BentoTheme.colors.textSecondary,
                         lineHeight = 15.sp
                     )
                 }
@@ -608,9 +625,9 @@ fun AutoProcessToggleCard(
                 modifier = Modifier.testTag("auto_process_switch"),
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = BentoPurplePrimary,
+                    checkedTrackColor = BentoTheme.colors.purplePrimary,
                     uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = Color(0xFFCBD5E1)
+                    uncheckedTrackColor = BentoTheme.colors.cardMuted
                 )
             )
         }
@@ -620,7 +637,9 @@ fun AutoProcessToggleCard(
 @Composable
 fun BentoHeader(
     isServiceActive: Boolean,
+    themeMode: ThemeMode,
     onToggleService: () -> Unit,
+    onOpenThemeDialog: () -> Unit,
     onRefresh: () -> Unit
 ) {
     Row(
@@ -636,7 +655,7 @@ fun BentoHeader(
                 fontSize = 24.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.5).sp,
-                color = BentoTextPrimary
+                color = BentoTheme.colors.textPrimary
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -650,13 +669,13 @@ fun BentoHeader(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (isServiceActive) BentoGreenActive else BentoTextSecondary)
+                        .background(if (isServiceActive) BentoTheme.colors.greenActive else BentoTheme.colors.textSecondary)
                 )
                 Text(
                     text = if (isServiceActive) "Background Service Active" else "Background Service Paused",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = BentoTextSecondary
+                    color = BentoTheme.colors.textSecondary
                 )
             }
         }
@@ -670,30 +689,34 @@ fun BentoHeader(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(BentoCardMuted)
+                    .background(BentoTheme.colors.cardMuted)
                     .testTag("refresh_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Refresh",
-                    tint = BentoTextPrimary,
+                    tint = BentoTheme.colors.textPrimary,
                     modifier = Modifier.size(20.dp)
                 )
             }
 
-            Box(
+            IconButton(
+                onClick = onOpenThemeDialog,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(BentoPurpleContainer)
-                    .clickable { onToggleService() },
-                contentAlignment = Alignment.Center
+                    .background(BentoTheme.colors.purpleContainer)
+                    .testTag("theme_toggle_button")
             ) {
                 Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Profile",
-                    tint = BentoPurpleDark,
-                    modifier = Modifier.size(22.dp)
+                    imageVector = when (themeMode) {
+                        ThemeMode.LIGHT -> Icons.Default.LightMode
+                        ThemeMode.DARK -> Icons.Default.DarkMode
+                        ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                    },
+                    contentDescription = "Change Theme (${themeMode.name})",
+                    tint = BentoTheme.colors.purplePrimary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -716,16 +739,16 @@ fun BentoHeroPhotoCard(
                 shape = RoundedCornerShape(32.dp),
                 spotColor = Color(0x1A000000)
             )
-            .border(1.dp, BentoBorder, RoundedCornerShape(32.dp))
+            .border(1.dp, BentoTheme.colors.border, RoundedCornerShape(32.dp))
             .testTag("photo_display_card"),
         shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = BentoCardMuted)
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardMuted)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1.15f)
-                .background(Color(0xFFEBEBEB))
+                .background(BentoTheme.colors.cardMuted)
                 .pointerInput(enhancementState) {
                     if (enhancementState is EnhancementUiState.Success) {
                         detectTapGestures(
@@ -777,7 +800,7 @@ fun BentoHeroPhotoCard(
                         modifier = Modifier.padding(24.dp)
                     ) {
                         CircularProgressIndicator(
-                            color = BentoPurpleLight,
+                            color = BentoTheme.colors.purpleLight,
                             strokeWidth = 3.5.dp,
                             modifier = Modifier.size(36.dp)
                         )
@@ -801,7 +824,7 @@ fun BentoHeroPhotoCard(
                 color = when {
                     enhancementState is EnhancementUiState.Error -> Color(0xFFD32F2F).copy(alpha = 0.85f)
                     isShowingOriginal -> Color.Black.copy(alpha = 0.65f)
-                    enhancementState is EnhancementUiState.Success -> BentoPurpleDark.copy(alpha = 0.85f)
+                    enhancementState is EnhancementUiState.Success -> BentoTheme.colors.purpleDark.copy(alpha = 0.85f)
                     else -> Color.Black.copy(alpha = 0.45f)
                 },
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
@@ -924,13 +947,13 @@ fun BentoHeroPhotoCard(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(BentoPurpleLight)
+                        .background(BentoTheme.colors.purpleLight)
                         .testTag("share_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
-                        tint = BentoPurpleText,
+                        tint = BentoTheme.colors.purpleText,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -955,8 +978,8 @@ fun DcimPhotoPagingGrid(
             .fillMaxWidth()
             .testTag("dcim_photos_card"),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardBg),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
     ) {
         Column(
             modifier = Modifier
@@ -978,13 +1001,13 @@ fun DcimPhotoPagingGrid(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(BentoPurpleContainer),
+                            .background(BentoTheme.colors.purpleContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Collections,
                             contentDescription = null,
-                            tint = BentoPurplePrimary,
+                            tint = BentoTheme.colors.purplePrimary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -994,20 +1017,20 @@ fun DcimPhotoPagingGrid(
                             text = "DCIM Camera Photos",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = BentoTextPrimary
+                            color = BentoTheme.colors.textPrimary
                         )
                         Text(
                             text = if (totalLoaded > 0) "$totalLoaded photo${if (totalLoaded == 1) "" else "s"} loaded via Paging 3" else "Paging 3 DCIM Gallery",
                             fontSize = 11.sp,
-                            color = BentoTextSecondary
+                            color = BentoTheme.colors.textSecondary
                         )
                     }
                 }
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = BentoPurpleContainer,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary.copy(alpha = 0.2f))
+                    color = BentoTheme.colors.purpleContainer,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary.copy(alpha = 0.2f))
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1017,7 +1040,7 @@ fun DcimPhotoPagingGrid(
                         if (appendState is LoadState.Loading || refreshState is LoadState.Loading) {
                             CircularProgressIndicator(
                                 strokeWidth = 1.5.dp,
-                                color = BentoPurplePrimary,
+                                color = BentoTheme.colors.purplePrimary,
                                 modifier = Modifier.size(10.dp)
                             )
                         }
@@ -1025,7 +1048,7 @@ fun DcimPhotoPagingGrid(
                             text = "$totalLoaded loaded",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = BentoPurplePrimary
+                            color = BentoTheme.colors.purplePrimary
                         )
                     }
                 }
@@ -1044,13 +1067,13 @@ fun DcimPhotoPagingGrid(
                     ) {
                         CircularProgressIndicator(
                             strokeWidth = 2.5.dp,
-                            color = BentoPurplePrimary,
+                            color = BentoTheme.colors.purplePrimary,
                             modifier = Modifier.size(28.dp)
                         )
                         Text(
                             text = "Loading DCIM gallery with Paging 3…",
                             fontSize = 12.sp,
-                            color = BentoTextSecondary
+                            color = BentoTheme.colors.textSecondary
                         )
                     }
                 }
@@ -1093,28 +1116,28 @@ fun DcimPhotoPagingGrid(
                         Icon(
                             imageVector = Icons.Default.Collections,
                             contentDescription = null,
-                            tint = BentoTextSecondary.copy(alpha = 0.5f),
+                            tint = BentoTheme.colors.textSecondary.copy(alpha = 0.5f),
                             modifier = Modifier.size(40.dp)
                         )
                         Text(
                             text = "No photos in DCIM folder",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            color = BentoTextSecondary
+                            color = BentoTheme.colors.textSecondary
                         )
                         FilledTonalButton(
                             onClick = onLoadSample,
                             shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoCardAiBlue)
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoTheme.colors.cardAiBlue)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                tint = BentoAiBluePrimary,
+                                tint = BentoTheme.colors.aiBluePrimary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Load Demo Photo", color = BentoAiBlueText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Load Demo Photo", color = BentoTheme.colors.aiBlueText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -1156,9 +1179,9 @@ fun DcimPhotoPagingGrid(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
                                 .testTag("dcim_load_more_indicator"),
-                            color = BentoPurpleContainer.copy(alpha = 0.5f),
+                            color = BentoTheme.colors.purpleContainer.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(14.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary.copy(alpha = 0.25f))
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary.copy(alpha = 0.25f))
                         ) {
                             Row(
                                 modifier = Modifier
@@ -1169,7 +1192,7 @@ fun DcimPhotoPagingGrid(
                             ) {
                                 CircularProgressIndicator(
                                     strokeWidth = 2.dp,
-                                    color = BentoPurplePrimary,
+                                    color = BentoTheme.colors.purplePrimary,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -1177,7 +1200,7 @@ fun DcimPhotoPagingGrid(
                                     text = "Paging 3 loading more photos…",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = BentoPurplePrimary
+                                    color = BentoTheme.colors.purplePrimary
                                 )
                             }
                         }
@@ -1196,7 +1219,7 @@ fun DcimPhotoPagingGrid(
                                 color = Color(0xFFE53935)
                             )
                             TextButton(onClick = { pagingItems.retry() }) {
-                                Text("Retry", fontSize = 12.sp, color = BentoPurplePrimary)
+                                Text("Retry", fontSize = 12.sp, color = BentoTheme.colors.purplePrimary)
                             }
                         }
                     }
@@ -1213,7 +1236,7 @@ fun DcimPhotoPagingGrid(
                                     text = "✓ All $totalLoaded photos loaded",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = BentoTextSecondary
+                                    color = BentoTheme.colors.textSecondary
                                 )
                             }
                         } else if (!appendState.endOfPaginationReached && totalLoaded >= 10) {
@@ -1226,7 +1249,7 @@ fun DcimPhotoPagingGrid(
                                             pagingItems[totalLoaded - 1]
                                         }
                                     },
-                                color = BentoPurpleContainer.copy(alpha = 0.35f),
+                                color = BentoTheme.colors.purpleContainer.copy(alpha = 0.35f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Row(
@@ -1239,7 +1262,7 @@ fun DcimPhotoPagingGrid(
                                     Icon(
                                         imageVector = Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
-                                        tint = BentoPurplePrimary,
+                                        tint = BentoTheme.colors.purplePrimary,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -1247,7 +1270,7 @@ fun DcimPhotoPagingGrid(
                                         text = "Scroll down to load next page on-demand",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = BentoPurplePrimary
+                                        color = BentoTheme.colors.purplePrimary
                                     )
                                 }
                             }
@@ -1272,8 +1295,8 @@ fun DcimPhotoGridItem(
             .clickable { onClick() }
             .testTag("dcim_grid_item_${photo.id}"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardMuted),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
@@ -1489,8 +1512,8 @@ fun UnifiedPhotoPreviewOverlay(
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = BentoPurplePrimary.copy(alpha = 0.3f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoPurplePrimary)
+                            color = BentoTheme.colors.purplePrimary.copy(alpha = 0.3f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary)
                         ) {
                             Text(
                                 text = "GEMINI REMASTER",
@@ -1516,7 +1539,7 @@ fun UnifiedPhotoPreviewOverlay(
                                 .height(48.dp)
                                 .testTag(if (isFromCamera) "preview_enhance_button" else "modal_enhance_button"),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BentoPurplePrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -1655,8 +1678,8 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
             .fillMaxWidth()
             .testTag("ai_analysis_card"),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardBg),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -1675,13 +1698,13 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
                         modifier = Modifier
                             .size(30.dp)
                             .clip(CircleShape)
-                            .background(BentoPurpleContainer),
+                            .background(BentoTheme.colors.purpleContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = BentoPurpleDark,
+                            tint = BentoTheme.colors.purpleDark,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -1689,7 +1712,7 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
                         text = "Detected Scene: ${analysis.category.emoji} ${analysis.sceneType}",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = BentoTextPrimary
+                        color = BentoTheme.colors.textPrimary
                     )
                 }
 
@@ -1710,7 +1733,7 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
             Text(
                 text = analysis.aiInsight,
                 fontSize = 12.sp,
-                color = BentoTextSecondary,
+                color = BentoTheme.colors.textSecondary,
                 lineHeight = 17.sp
             )
 
@@ -1722,13 +1745,13 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
                     analysis.detectedElements.take(3).forEach { element ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = BentoCardMuted
+                            color = BentoTheme.colors.cardMuted
                         ) {
                             Text(
                                 text = "• $element",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = BentoTextSecondary,
+                                color = BentoTheme.colors.textSecondary,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -1750,15 +1773,15 @@ fun BentoAiAnalysisCard(analysis: AiPhotoAnalysis) {
                 AiScorePill(
                     label = "Sharpness",
                     value = "${analysis.sharpnessScore}%",
-                    color = BentoAiBlueText,
-                    bg = BentoCardAiBlue,
+                    color = BentoTheme.colors.aiBlueText,
+                    bg = BentoTheme.colors.cardAiBlue,
                     modifier = Modifier.weight(1f)
                 )
                 AiScorePill(
                     label = "Noise Red.",
                     value = "${analysis.noiseReductionScore}%",
-                    color = BentoPurpleText,
-                    bg = BentoPurpleContainer,
+                    color = BentoTheme.colors.purpleText,
+                    bg = BentoTheme.colors.purpleContainer,
                     modifier = Modifier.weight(1f)
                 )
                 AiScorePill(
@@ -1819,8 +1842,8 @@ fun StudioActionControls(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+            colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardBg),
+            border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
         ) {
             Row(
                 modifier = Modifier
@@ -1858,7 +1881,7 @@ fun StudioActionControls(
                         .height(48.dp)
                         .testTag("reset_button"),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BentoTextPrimary)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BentoTheme.colors.textPrimary)
                 ) {
                     Text("Reset", fontSize = 13.sp)
                 }
@@ -1876,8 +1899,8 @@ fun EmptyCameraState(
             .fillMaxWidth()
             .testTag("empty_camera_state"),
         shape = RoundedCornerShape(32.dp),
-        colors = CardDefaults.cardColors(containerColor = BentoCardMuted),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardMuted),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
     ) {
         Column(
             modifier = Modifier
@@ -1890,13 +1913,13 @@ fun EmptyCameraState(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(CircleShape)
-                    .background(BentoPurpleContainer),
+                    .background(BentoTheme.colors.purpleContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.CameraAlt,
                     contentDescription = null,
-                    tint = BentoPurplePrimary,
+                    tint = BentoTheme.colors.purplePrimary,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -1906,13 +1929,13 @@ fun EmptyCameraState(
                     text = "No Camera Photos Yet",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = BentoTextPrimary
+                    color = BentoTheme.colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Tap the floating camera button below to snap a photo in-app. Snapsense will automatically process and enhance it with Gemini AI.",
                     fontSize = 13.sp,
-                    color = BentoTextSecondary,
+                    color = BentoTheme.colors.textSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 18.sp
                 )
@@ -1925,17 +1948,212 @@ fun EmptyCameraState(
                     .height(50.dp)
                     .testTag("load_sample_photo_button"),
                 shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoCardAiBlue)
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoTheme.colors.cardAiBlue)
             ) {
                 Icon(
                     imageVector = Icons.Default.AutoAwesome,
                     contentDescription = null,
-                    tint = BentoAiBluePrimary,
+                    tint = BentoTheme.colors.aiBluePrimary,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Load Scenic Demo Photo", color = BentoAiBlueText, fontWeight = FontWeight.SemiBold)
+                Text("Load Scenic Demo Photo", color = BentoTheme.colors.aiBlueText, fontWeight = FontWeight.SemiBold)
             }
+        }
+    }
+}
+
+@Composable
+fun ThemeSelectionDialog(
+    currentMode: ThemeMode,
+    onSelectMode: (ThemeMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .testTag("theme_selection_dialog"),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.cardBg),
+            border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(BentoTheme.colors.purpleContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = BentoTheme.colors.purplePrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = stringResource(R.string.theme_dialog_title),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoTheme.colors.textPrimary
+                            )
+                            Text(
+                                text = "Choose app appearance",
+                                fontSize = 12.sp,
+                                color = BentoTheme.colors.textSecondary
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = BentoTheme.colors.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeOptionRow(
+                        title = stringResource(R.string.theme_system),
+                        subtitle = "Follows Android OS system theme",
+                        icon = Icons.Default.BrightnessAuto,
+                        isSelected = currentMode == ThemeMode.SYSTEM,
+                        onClick = { onSelectMode(ThemeMode.SYSTEM) }
+                    )
+
+                    ThemeOptionRow(
+                        title = stringResource(R.string.theme_light),
+                        subtitle = "Clean light aesthetic",
+                        icon = Icons.Default.LightMode,
+                        isSelected = currentMode == ThemeMode.LIGHT,
+                        onClick = { onSelectMode(ThemeMode.LIGHT) }
+                    )
+
+                    ThemeOptionRow(
+                        title = stringResource(R.string.theme_dark),
+                        subtitle = "Dark aesthetic for low light",
+                        icon = Icons.Default.DarkMode,
+                        isSelected = currentMode == ThemeMode.DARK,
+                        onClick = { onSelectMode(ThemeMode.DARK) }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = "Done",
+                            color = BentoTheme.colors.purplePrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ThemeOptionRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .selectable(
+                selected = isSelected,
+                onClick = onClick
+            )
+            .testTag("theme_option_${title.lowercase()}"),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) BentoTheme.colors.purpleContainer.copy(alpha = 0.6f) else BentoTheme.colors.cardMuted,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isSelected) BentoTheme.colors.purplePrimary.copy(alpha = 0.5f) else Color.Transparent
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) BentoTheme.colors.purplePrimary else BentoTheme.colors.textSecondary,
+                    modifier = Modifier.size(22.dp)
+                )
+
+                Column {
+                    Text(
+                        text = title,
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = BentoTheme.colors.textPrimary
+                    )
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.sp,
+                        color = BentoTheme.colors.textSecondary
+                    )
+                }
+            }
+
+            RadioButton(
+                selected = isSelected,
+                onClick = onClick,
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = BentoTheme.colors.purplePrimary,
+                    unselectedColor = BentoTheme.colors.textSecondary
+                )
+            )
         }
     }
 }

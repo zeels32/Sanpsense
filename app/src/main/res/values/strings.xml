@@ -27,4 +27,11 @@
     <string name="queue_title">AI Enhancement Queue</string>
     <string name="queue_subtitle">Managing parallel and rapid camera capture requests</string>
     <string name="re_enhance_title">Re-Enhance Photo</string>
+    <string name="theme_dialog_title">App Appearance</string>
+    <string name="theme_system">System Default</string>
+    <string name="theme_system_desc">Follow Android OS dark or light setting</string>
+    <string name="theme_light">Light Mode</string>
+    <string name="theme_light_desc">Clean high-contrast light theme</string>
+    <string name="theme_dark">Dark Mode</string>
+    <string name="theme_dark_desc">OLED-friendly dark theme with purple accents</string>
 </resources>

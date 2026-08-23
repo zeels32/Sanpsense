@@ -80,6 +80,7 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.db.EnhancedPhotoEntity
 import com.example.data.model.EnhancementPreset
+import com.example.ui.theme.BentoTheme
 import com.example.ui.viewmodel.CameraAiViewModel
 import com.example.ui.viewmodel.StudioTab
 import java.text.SimpleDateFormat
@@ -113,7 +114,7 @@ fun AiGalleryScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF6F8FA))
+            .background(BentoTheme.colors.bg)
     ) {
         Column(
             modifier = Modifier
@@ -128,7 +129,8 @@ fun AiGalleryScreen(
                     .fillMaxWidth()
                     .testTag("gallery_header_card"),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
@@ -145,13 +147,13 @@ fun AiGalleryScreen(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFEDE7F6)),
+                                    .background(BentoTheme.colors.purpleContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = null,
-                                    tint = Color(0xFF673AB7),
+                                    tint = BentoTheme.colors.purplePrimary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -160,25 +162,25 @@ fun AiGalleryScreen(
                                     text = stringResource(R.string.gallery_title),
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1E293B)
+                                    color = BentoTheme.colors.textPrimary
                                 )
                                 Text(
                                     text = "${enhancedPhotos.size} photos remastered • Saved to Pictures/Camera_AI",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF64748B)
+                                    color = BentoTheme.colors.textSecondary
                                 )
                             }
                         }
 
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF673AB7).copy(alpha = 0.1f)
+                            color = BentoTheme.colors.purpleContainer
                         ) {
                             Text(
                                 text = "${enhancedPhotos.size} SAVED",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF673AB7),
+                                color = BentoTheme.colors.purplePrimary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
@@ -232,13 +234,13 @@ fun AiGalleryScreen(
                             modifier = Modifier
                                 .size(88.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFE2E8F0)),
+                                .background(BentoTheme.colors.cardMuted),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PhotoLibrary,
                                 contentDescription = null,
-                                tint = Color(0xFF64748B),
+                                tint = BentoTheme.colors.textSecondary,
                                 modifier = Modifier.size(44.dp)
                             )
                         }
@@ -246,13 +248,13 @@ fun AiGalleryScreen(
                             text = if (selectedSceneFilter != null) "No photos in $selectedSceneFilter" else stringResource(R.string.gallery_empty_title),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B),
+                            color = BentoTheme.colors.textPrimary,
                             textAlign = TextAlign.Center
                         )
                         Text(
                             text = stringResource(R.string.gallery_empty_desc),
                             fontSize = 13.sp,
-                            color = Color(0xFF64748B),
+                            color = BentoTheme.colors.textSecondary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
@@ -262,7 +264,10 @@ fun AiGalleryScreen(
                         Button(
                             onClick = { viewModel.selectTab(StudioTab.STUDIO) },
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BentoTheme.colors.purplePrimary,
+                                contentColor = Color.White
+                            ),
                             modifier = Modifier.testTag("gallery_go_studio_button")
                         ) {
                             Icon(
@@ -328,17 +333,17 @@ fun GalleryFilterChip(
             .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) Color(0xFF673AB7) else Color(0xFFF1F5F9),
+        color = if (isSelected) BentoTheme.colors.purplePrimary else BentoTheme.colors.cardMuted,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isSelected) Color(0xFF673AB7) else Color.Transparent
+            if (isSelected) BentoTheme.colors.purplePrimary else BentoTheme.colors.border
         )
     ) {
         Text(
             text = label,
             fontSize = 11.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else Color(0xFF475569),
+            color = if (isSelected) Color.White else BentoTheme.colors.textSecondary,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             textAlign = TextAlign.Center
         )
@@ -362,7 +367,8 @@ fun GalleryPhotoCard(
             .clickable { onClick() }
             .testTag("gallery_photo_card_${photo.id}"),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -370,7 +376,7 @@ fun GalleryPhotoCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(Color(0xFFE2E8F0))
+                    .background(BentoTheme.colors.cardMuted)
             ) {
                 AsyncImage(
                     model = photo.enhancedUri,
@@ -397,7 +403,7 @@ fun GalleryPhotoCard(
                         .align(Alignment.TopStart)
                         .padding(8.dp),
                     shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF673AB7).copy(alpha = 0.88f)
+                    color = BentoTheme.colors.purplePrimary.copy(alpha = 0.88f)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
@@ -447,14 +453,14 @@ fun GalleryPhotoCard(
                     text = photo.enhancedDisplayName,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E293B),
+                    color = BentoTheme.colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "$dateStr • Auto AI Remastered",
                     fontSize = 10.sp,
-                    color = Color(0xFF64748B),
+                    color = BentoTheme.colors.textSecondary,
                     maxLines = 1
                 )
             }

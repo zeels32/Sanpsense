@@ -67,6 +67,7 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.EnhancementQueueItem
 import com.example.data.model.QueueItemStatus
+import com.example.ui.theme.BentoTheme
 import com.example.ui.viewmodel.CameraAiViewModel
 import com.example.ui.viewmodel.StudioTab
 import java.text.SimpleDateFormat
@@ -88,7 +89,7 @@ fun AiQueueScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF6F8FA))
+            .background(BentoTheme.colors.bg)
     ) {
         Column(
             modifier = Modifier
@@ -103,7 +104,8 @@ fun AiQueueScreen(
                     .fillMaxWidth()
                     .testTag("queue_header_card"),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
@@ -120,13 +122,13 @@ fun AiQueueScreen(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFE0F2FE)),
+                                    .background(BentoTheme.colors.aiBlueContainer),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Schedule,
                                     contentDescription = null,
-                                    tint = Color(0xFF0288D1),
+                                    tint = BentoTheme.colors.aiBluePrimary,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -135,12 +137,12 @@ fun AiQueueScreen(
                                     text = stringResource(R.string.queue_title),
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1E293B)
+                                    color = BentoTheme.colors.textPrimary
                                 )
                                 Text(
                                     text = "Sequential Gemini 3.1 Flash Image processing",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF64748B)
+                                    color = BentoTheme.colors.textSecondary
                                 )
                             }
                         }
@@ -151,12 +153,12 @@ fun AiQueueScreen(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFF1F5F9))
+                                    .background(BentoTheme.colors.cardMuted)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ClearAll,
                                     contentDescription = "Clear completed",
-                                    tint = Color(0xFF475569),
+                                    tint = BentoTheme.colors.textSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -173,19 +175,19 @@ fun AiQueueScreen(
                         QueueStatBadge(
                             label = "Active / Pending",
                             count = pendingCount,
-                            color = Color(0xFF0288D1),
+                            color = BentoTheme.colors.aiBluePrimary,
                             modifier = Modifier.weight(1f)
                         )
                         QueueStatBadge(
                             label = "Saved to Gallery",
                             count = completedCount,
-                            color = Color(0xFF2E7D32),
+                            color = BentoTheme.colors.greenActive,
                             modifier = Modifier.weight(1f)
                         )
                         QueueStatBadge(
                             label = "Stopped / Failed",
                             count = failedOrStoppedCount,
-                            color = if (failedOrStoppedCount > 0) Color(0xFFD97706) else Color(0xFF94A3B8),
+                            color = if (failedOrStoppedCount > 0) Color(0xFFF59E0B) else BentoTheme.colors.textSecondary,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -211,13 +213,13 @@ fun AiQueueScreen(
                             modifier = Modifier
                                 .size(88.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFE2E8F0)),
+                                .background(BentoTheme.colors.cardMuted),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.HourglassEmpty,
                                 contentDescription = null,
-                                tint = Color(0xFF64748B),
+                                tint = BentoTheme.colors.textSecondary,
                                 modifier = Modifier.size(44.dp)
                             )
                         }
@@ -225,13 +227,13 @@ fun AiQueueScreen(
                             text = "AI Enhancement Queue is Empty",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1E293B),
+                            color = BentoTheme.colors.textPrimary,
                             textAlign = TextAlign.Center
                         )
                         Text(
                             text = "When capturing photos rapidly with Auto-Process ON, they queue here automatically and process non-destructively in sequence.",
                             fontSize = 13.sp,
-                            color = Color(0xFF64748B),
+                            color = BentoTheme.colors.textSecondary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
@@ -239,7 +241,10 @@ fun AiQueueScreen(
                         Button(
                             onClick = { viewModel.enqueueCurrentPhoto() },
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0288D1)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BentoTheme.colors.aiBluePrimary,
+                                contentColor = Color.White
+                            ),
                             modifier = Modifier.testTag("enqueue_current_button")
                         ) {
                             Icon(
@@ -285,8 +290,8 @@ fun QueueStatBadge(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.08f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.2f))
+        color = color.copy(alpha = 0.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
@@ -302,7 +307,7 @@ fun QueueStatBadge(
                 text = label,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
-                color = color.copy(alpha = 0.85f),
+                color = color.copy(alpha = 0.9f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -327,7 +332,8 @@ fun QueueItemCard(
             .fillMaxWidth()
             .testTag("queue_card_${item.id}"),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = BentoTheme.colors.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.border),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -341,7 +347,7 @@ fun QueueItemCard(
                     modifier = Modifier
                         .size(54.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFE2E8F0))
+                        .background(BentoTheme.colors.cardMuted)
                 ) {
                     val displayUri = when (val status = item.status) {
                         is QueueItemStatus.Completed -> status.enhancedUri
@@ -361,7 +367,7 @@ fun QueueItemCard(
                         text = item.photo.displayName,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B),
+                        color = BentoTheme.colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -372,20 +378,20 @@ fun QueueItemCard(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF673AB7).copy(alpha = 0.1f)
+                            color = BentoTheme.colors.purplePrimary.copy(alpha = 0.15f)
                         ) {
                             Text(
                                 text = item.preset.title,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF673AB7),
+                                color = BentoTheme.colors.purplePrimary,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                         Text(
                             text = "Queued at $timeStr",
                             fontSize = 10.sp,
-                            color = Color(0xFF94A3B8)
+                            color = BentoTheme.colors.textSecondary
                         )
                     }
                 }
@@ -399,13 +405,13 @@ fun QueueItemCard(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFF0288D1).copy(alpha = 0.1f)
+                                color = BentoTheme.colors.aiBluePrimary.copy(alpha = 0.15f)
                             ) {
                                 Text(
                                     text = "WAITING",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0288D1),
+                                    color = BentoTheme.colors.aiBluePrimary,
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
                             }
@@ -414,13 +420,13 @@ fun QueueItemCard(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFFEE2E2))
+                                    .background(BentoTheme.colors.errorBg)
                                     .testTag("stop_pending_${item.id}")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Cancel/Stop",
-                                    tint = Color(0xFFDC2626),
+                                    tint = BentoTheme.colors.errorText,
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
@@ -433,15 +439,15 @@ fun QueueItemCard(
                         ) {
                             CircularProgressIndicator(
                                 strokeWidth = 2.5.dp,
-                                color = Color(0xFF0288D1),
+                                color = BentoTheme.colors.aiBluePrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                             // Prominent Stop Button
                             Surface(
                                 onClick = onStop,
                                 shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFEF4444).copy(alpha = 0.12f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.35f)),
+                                color = BentoTheme.colors.errorBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.errorBorder),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
                                     .testTag("stop_button_${item.id}")
@@ -454,14 +460,14 @@ fun QueueItemCard(
                                     Icon(
                                         imageVector = Icons.Default.Stop,
                                         contentDescription = "Stop",
-                                        tint = Color(0xFFDC2626),
+                                        tint = BentoTheme.colors.errorText,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Text(
                                         text = "STOP",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFFDC2626)
+                                        color = BentoTheme.colors.errorText
                                     )
                                 }
                             }
@@ -474,13 +480,13 @@ fun QueueItemCard(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFF59E0B).copy(alpha = 0.15f)
+                                color = Color(0xFFF59E0B).copy(alpha = 0.18f)
                             ) {
                                 Text(
                                     text = "STOPPED",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFD97706),
+                                    color = Color(0xFFF59E0B),
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
                             }
@@ -489,13 +495,13 @@ fun QueueItemCard(
                                 modifier = Modifier
                                     .size(30.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFE0F2FE))
+                                    .background(BentoTheme.colors.aiBlueContainer)
                                     .testTag("resume_button_${item.id}")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = "Resume",
-                                    tint = Color(0xFF0288D1),
+                                    tint = BentoTheme.colors.aiBluePrimary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -505,7 +511,7 @@ fun QueueItemCard(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Completed",
-                            tint = Color(0xFF2E7D32),
+                            tint = BentoTheme.colors.greenActive,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -515,13 +521,13 @@ fun QueueItemCard(
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFD32F2F).copy(alpha = 0.1f))
+                                .background(BentoTheme.colors.errorBg)
                                 .testTag("retry_button_${item.id}")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Retry",
-                                tint = Color(0xFFD32F2F),
+                                tint = BentoTheme.colors.errorText,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -540,8 +546,8 @@ fun QueueItemCard(
                                 .fillMaxWidth()
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp)),
-                            color = Color(0xFF0288D1),
-                            trackColor = Color(0xFFE0F2FE)
+                            color = BentoTheme.colors.aiBluePrimary,
+                            trackColor = BentoTheme.colors.aiBlueContainer
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -552,7 +558,7 @@ fun QueueItemCard(
                                 text = status.stage,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = Color(0xFF0288D1),
+                                color = BentoTheme.colors.aiBluePrimary,
                                 modifier = Modifier.weight(1f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -561,7 +567,7 @@ fun QueueItemCard(
                                 text = "Cancel/Stop",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFDC2626),
+                                color = BentoTheme.colors.errorText,
                                 modifier = Modifier
                                     .clickable { onStop() }
                                     .padding(start = 6.dp)
@@ -573,8 +579,8 @@ fun QueueItemCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFFFFBEB),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A))
+                        color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.3f))
                     ) {
                         Row(
                             modifier = Modifier
@@ -586,25 +592,25 @@ fun QueueItemCard(
                             Icon(
                                 imageVector = Icons.Default.StopCircle,
                                 contentDescription = null,
-                                tint = Color(0xFFD97706),
+                                tint = Color(0xFFF59E0B),
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = status.reason,
                                 fontSize = 11.sp,
-                                color = Color(0xFFB45309),
+                                color = BentoTheme.colors.textPrimary,
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
                                 modifier = Modifier.clickable { onRetry() },
                                 shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFD97706).copy(alpha = 0.15f)
+                                color = Color(0xFFF59E0B).copy(alpha = 0.2f)
                             ) {
                                 Text(
                                     text = "RESUME",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFB45309),
+                                    color = Color(0xFFF59E0B),
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                 )
                             }
@@ -615,8 +621,8 @@ fun QueueItemCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFFFF1F1),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD1D1))
+                        color = BentoTheme.colors.errorBg,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.errorBorder)
                     ) {
                         Row(
                             modifier = Modifier
@@ -628,20 +634,20 @@ fun QueueItemCard(
                             Icon(
                                 imageVector = Icons.Default.ErrorOutline,
                                 contentDescription = null,
-                                tint = Color(0xFFD32F2F),
+                                tint = BentoTheme.colors.errorText,
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = status.error,
                                 fontSize = 11.sp,
-                                color = Color(0xFFD32F2F),
+                                color = BentoTheme.colors.errorText,
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
                                 text = "TAP RETRY",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFD32F2F)
+                                color = BentoTheme.colors.errorText
                             )
                         }
                     }
@@ -657,18 +663,18 @@ fun QueueItemCard(
                             text = "✓ Remastered in 4K & Saved to Gallery",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color(0xFF2E7D32)
+                            color = BentoTheme.colors.greenActive
                         )
                         Surface(
                             modifier = Modifier.clickable { onViewInGallery() },
                             shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFF2E7D32).copy(alpha = 0.1f)
+                            color = BentoTheme.colors.greenActive.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = "VIEW IN GALLERY",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32),
+                                color = BentoTheme.colors.greenActive,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                             )
                         }
