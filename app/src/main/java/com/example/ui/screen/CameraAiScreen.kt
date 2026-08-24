@@ -430,10 +430,7 @@ fun StudioWorkspaceContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Bento Header Section
-        BentoHeader(
-            isServiceActive = isServiceActive,
-            onToggleService = { viewModel.toggleBackgroundService() }
-        )
+        BentoHeader()
 
         // Active Queue Banner (when photos are actively processing)
         if (pendingQueueCount > 0) {
@@ -524,10 +521,7 @@ fun StudioWorkspaceContent(
         DcimPhotoPagingGrid(
             pagingItems = dcimLazyPagingItems,
             onPhotoClick = { photo -> viewModel.openPhotoPreview(photo) },
-            onLoadSample = {
-                viewModel.loadSamplePhoto()
-                dcimLazyPagingItems.refresh()
-            }
+            onOpenCamera = { viewModel.openCamera() }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -630,10 +624,7 @@ fun AutoProcessToggleCard(
 }
 
 @Composable
-fun BentoHeader(
-    isServiceActive: Boolean,
-    onToggleService: () -> Unit
-) {
+fun BentoHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -641,36 +632,13 @@ fun BentoHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(
-                text = "Snapsense",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.5).sp,
-                color = BentoTheme.colors.textPrimary
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onToggleService() }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (isServiceActive) BentoTheme.colors.greenActive else BentoTheme.colors.textSecondary)
-                )
-                Text(
-                    text = if (isServiceActive) "Background Service Active" else "Background Service Paused",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = BentoTheme.colors.textSecondary
-                )
-            }
-        }
+        Text(
+            text = "Snapsense",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.5).sp,
+            color = BentoTheme.colors.textPrimary
+        )
     }
 }
 
@@ -917,7 +885,7 @@ fun BentoHeroPhotoCard(
 fun DcimPhotoPagingGrid(
     pagingItems: LazyPagingItems<CameraPhoto>,
     onPhotoClick: (CameraPhoto) -> Unit,
-    onLoadSample: () -> Unit,
+    onOpenCamera: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val totalLoaded = pagingItems.itemCount
@@ -971,14 +939,14 @@ fun DcimPhotoPagingGrid(
                             color = BentoTheme.colors.textPrimary
                         )
                         Text(
-                            text = if (totalLoaded > 0) "$totalLoaded photo${if (totalLoaded == 1) "" else "s"} loaded via Paging 3" else "Paging 3 DCIM Gallery",
+                            text = if (totalLoaded > 0) "$totalLoaded photo${if (totalLoaded == 1) "" else "s"} loaded" else "DCIM Gallery",
                             fontSize = 11.sp,
                             color = BentoTheme.colors.textSecondary
                         )
                     }
                 }
 
-                Surface(
+                /*Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = BentoTheme.colors.purpleContainer,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary.copy(alpha = 0.2f))
@@ -1002,7 +970,7 @@ fun DcimPhotoPagingGrid(
                             color = BentoTheme.colors.purplePrimary
                         )
                     }
-                }
+                }*/
             }
 
             if (refreshState is LoadState.Loading && totalLoaded == 0) {
@@ -1022,7 +990,7 @@ fun DcimPhotoPagingGrid(
                             modifier = Modifier.size(28.dp)
                         )
                         Text(
-                            text = "Loading DCIM gallery with Paging 3…",
+                            text = "Loading DCIM gallery…",
                             fontSize = 12.sp,
                             color = BentoTheme.colors.textSecondary
                         )
@@ -1077,18 +1045,18 @@ fun DcimPhotoPagingGrid(
                             color = BentoTheme.colors.textSecondary
                         )
                         FilledTonalButton(
-                            onClick = onLoadSample,
+                            onClick = onOpenCamera,
                             shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoTheme.colors.cardAiBlue)
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = BentoTheme.colors.purpleContainer)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = Icons.Default.CameraAlt,
                                 contentDescription = null,
-                                tint = BentoTheme.colors.aiBluePrimary,
+                                tint = BentoTheme.colors.purplePrimary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Load Demo Photo", color = BentoTheme.colors.aiBlueText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Take a Photo", color = BentoTheme.colors.purplePrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

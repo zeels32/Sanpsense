@@ -176,18 +176,20 @@ fun AiGalleryScreen(
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = BentoTheme.colors.purpleContainer
-                        ) {
-                            Text(
-                                text = "${enhancedPhotos.size} SAVED",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = BentoTheme.colors.purplePrimary,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
+                        /*
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = BentoTheme.colors.purpleContainer
+                            ) {
+                                Text(
+                                    text = "${enhancedPhotos.size} SAVED",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = BentoTheme.colors.purplePrimary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        */
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))

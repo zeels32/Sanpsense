@@ -114,7 +114,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
                 config = PagingConfig(
                     pageSize = 20,
                     enablePlaceholders = false,
-                    prefetchDistance = 20, // Disable prefetch so next page loads strictly on-demand when user scrolls
+                    prefetchDistance = 5,
                     initialLoadSize = 20
                 ),
                 pagingSourceFactory = { DcimPagingSource(repository) }
@@ -127,7 +127,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
     val dcimPhotos: StateFlow<List<CameraPhoto>> = _dcimPhotos.asStateFlow()
 
     // Infinite Scroll Pagination for DCIM Photos
-    val pageSize: Int = 10
+    val pageSize: Int = 20
     private val _visibleDcimCount = MutableStateFlow(pageSize)
     val visibleDcimCount: StateFlow<Int> = _visibleDcimCount.asStateFlow()
 
@@ -188,14 +188,8 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
 
     fun loadDcimPhotos() {
         viewModelScope.launch {
-            val photos = repository.queryAllDcimPhotos()
-            if (photos.isNotEmpty()) {
-                _dcimPhotos.value = photos
-            } else if (_dcimPhotos.value.isEmpty()) {
-                // Generate a sample photo so user can test the grid immediately
-                val sample = repository.createSampleCameraPhoto()
-                _dcimPhotos.value = listOf(sample)
-            }
+            val photos = repository.queryDcimPhotosPaged(offset = 0, limit = pageSize)
+            _dcimPhotos.value = photos
             if (_visibleDcimCount.value < pageSize) {
                 _visibleDcimCount.value = pageSize
             }
@@ -252,12 +246,6 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
             val photo = repository.queryLatestCameraPhoto()
             if (photo != null && photo.isNativeCameraPath && !photo.isEnhancedImage) {
                 repository.setLatestPhoto(photo)
-            } else if (photo == null && latestPhoto.value == null) {
-                // If nothing in DCIM gallery yet, initialize with sample for first-time preview
-                val sample = repository.createSampleCameraPhoto()
-                if (isAutoProcessEnabled.value && !queueManager.hasPhotoBeenProcessedOrQueued(sample)) {
-                    queueManager.enqueue(sample, EnhancementPreset.AUTO)
-                }
             }
         }
     }

@@ -12,33 +12,28 @@ class DcimPagingSource(
     override fun getRefreshKey(state: PagingState<Int, CameraPhoto>): Int? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
+            anchorPage?.prevKey?.plus(PAGE_SIZE) ?: anchorPage?.nextKey?.minus(PAGE_SIZE)
         }
     }
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, CameraPhoto> {
-        val page = params.key ?: 0
-        val pageSize = params.loadSize
-        val offset = page * pageSize
+        val offset = params.key ?: 0
+        val limit = params.loadSize.coerceAtLeast(PAGE_SIZE)
 
         return try {
-            val photos = repository.queryDcimPhotosPaged(offset = offset, limit = pageSize)
-
-            // Fallback for demo if device gallery is totally empty on page 0
-            val resultData = if (page == 0 && photos.isEmpty()) {
-                val latest = repository.latestPhoto.value
-                if (latest != null) listOf(latest) else emptyList()
-            } else {
-                photos
-            }
+            val photos = repository.queryDcimPhotosPaged(offset = offset, limit = limit)
 
             LoadResult.Page(
-                data = resultData,
-                prevKey = if (page == 0) null else page - 1,
-                nextKey = if (photos.isEmpty() || photos.size < pageSize) null else page + 1
+                data = photos,
+                prevKey = if (offset == 0) null else maxOf(0, offset - limit),
+                nextKey = if (photos.isEmpty() || photos.size < limit) null else offset + photos.size
             )
         } catch (e: Exception) {
             LoadResult.Error(e)
         }
+    }
+
+    companion object {
+        const val PAGE_SIZE = 20
     }
 }

@@ -200,12 +200,110 @@ class CameraCaptureRepository(private val context: Context) {
 
     suspend fun queryDcimPhotosPaged(offset: Int, limit: Int): List<CameraPhoto> = withContext(Dispatchers.IO) {
         try {
-            val allPhotos = queryAllDcimPhotos()
-            if (offset >= allPhotos.size) {
-                emptyList()
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_TAKEN,
+                MediaStore.Images.Media.DATE_ADDED,
+                MediaStore.Images.Media.SIZE,
+                MediaStore.Images.Media.WIDTH,
+                MediaStore.Images.Media.HEIGHT,
+                MediaStore.Images.Media.MIME_TYPE,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Images.Media.RELATIVE_PATH
+                } else {
+                    MediaStore.Images.Media.DATA
+                },
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME
+                } else {
+                    MediaStore.Images.Media.DATA
+                }
+            )
+
+            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+            val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "(${MediaStore.Images.Media.RELATIVE_PATH} LIKE ? OR ${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} LIKE ?) " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ? " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ?"
             } else {
-                allPhotos.drop(offset).take(limit)
+                "(${MediaStore.Images.Media.DATA} LIKE ? OR ${MediaStore.Images.Media.DATA} LIKE ?) " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ? " +
+                "AND ${MediaStore.Images.Media.DISPLAY_NAME} NOT LIKE ?"
             }
+            val selectionArgs = arrayOf("%DCIM%", "%Camera%", "AI_Enhanced_%", "AI_%")
+
+            val list = mutableListOf<CameraPhoto>()
+
+            val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val queryArgs = android.os.Bundle().apply {
+                        putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+                        putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
+                        putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_ADDED))
+                        putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+                        putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+                        putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
+                    }
+                    contentResolver.query(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        queryArgs,
+                        null
+                    )
+                } catch (_: Exception) {
+                    contentResolver.query(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        "$sortOrder LIMIT $limit OFFSET $offset"
+                    )
+                }
+            } else {
+                contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    "$sortOrder LIMIT $limit OFFSET $offset"
+                )
+            }
+
+            cursor?.use { c ->
+                var readCount = 0
+                // If the provider returned rows without applying offset/limit, seek manually
+                if (c.count > limit && c.position == -1 && offset > 0) {
+                    if (c.moveToPosition(offset)) {
+                        do {
+                            val candidate = cursorToPhoto(c)
+                            if (candidate.isNativeCameraPath &&
+                                !candidate.isEnhancedImage &&
+                                !knownEnhancedUris.contains(candidate.uri) &&
+                                !knownEnhancedIds.contains(candidate.id) &&
+                                !knownEnhancedNames.contains(candidate.displayName)
+                            ) {
+                                list.add(candidate)
+                                readCount++
+                            }
+                        } while (readCount < limit && c.moveToNext())
+                    }
+                } else {
+                    while (c.moveToNext() && readCount < limit) {
+                        val candidate = cursorToPhoto(c)
+                        if (candidate.isNativeCameraPath &&
+                            !candidate.isEnhancedImage &&
+                            !knownEnhancedUris.contains(candidate.uri) &&
+                            !knownEnhancedIds.contains(candidate.id) &&
+                            !knownEnhancedNames.contains(candidate.displayName)
+                        ) {
+                            list.add(candidate)
+                            readCount++
+                        }
+                    }
+                }
+            }
+            list
         } catch (e: Exception) {
             Log.e("CameraRepository", "Error querying paged DCIM photos", e)
             emptyList()
