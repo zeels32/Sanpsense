@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Photo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -485,6 +486,58 @@ fun GalleryPhotoDetailDialog(
 ) {
     var isHoldingOriginal by remember { mutableStateOf(false) }
     var isOverlayVisible by remember { mutableStateOf(true) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = {
+                Text(
+                    text = "Delete AI Remaster?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = BentoTheme.colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${photo.enhancedDisplayName}\" from your AI Gallery and device storage?",
+                    fontSize = 14.sp,
+                    color = BentoTheme.colors.textSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("confirm_delete_ai_photo_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDeleteConfirmation = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = BentoTheme.colors.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     // Auto-hide floating information overlay after 3.5 seconds of inactivity
     LaunchedEffect(isOverlayVisible, isHoldingOriginal) {
@@ -628,15 +681,16 @@ fun GalleryPhotoDetailDialog(
                                 )
                             }
                             IconButton(
-                                onClick = onDelete,
+                                onClick = { showDeleteConfirmation = true },
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFFE53935).copy(alpha = 0.3f))
+                                    .testTag("gallery_delete_button")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
+                                    contentDescription = "Delete from AI Gallery",
                                     tint = Color(0xFFFF8A80),
                                     modifier = Modifier.size(17.dp)
                                 )

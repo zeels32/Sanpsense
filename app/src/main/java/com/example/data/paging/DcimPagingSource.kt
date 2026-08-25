@@ -12,21 +12,25 @@ class DcimPagingSource(
     override fun getRefreshKey(state: PagingState<Int, CameraPhoto>): Int? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey?.plus(PAGE_SIZE) ?: anchorPage?.nextKey?.minus(PAGE_SIZE)
+            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
         }
     }
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, CameraPhoto> {
-        val offset = params.key ?: 0
-        val limit = params.loadSize.coerceAtLeast(PAGE_SIZE)
+        val page = params.key ?: 0
+        val pageSize = params.loadSize.coerceAtLeast(PAGE_SIZE)
+        val offset = page * PAGE_SIZE
 
         return try {
-            val photos = repository.queryDcimPhotosPaged(offset = offset, limit = limit)
+            // Request pageSize + 1 to determine if more items exist
+            val photosWithExtra = repository.queryDcimPhotosPaged(offset = offset, limit = pageSize + 1)
+            val hasMore = photosWithExtra.size > pageSize
+            val photos = if (hasMore) photosWithExtra.take(pageSize) else photosWithExtra
 
             LoadResult.Page(
                 data = photos,
-                prevKey = if (offset == 0) null else maxOf(0, offset - limit),
-                nextKey = if (photos.isEmpty() || photos.size < limit) null else offset + photos.size
+                prevKey = if (page == 0) null else page - 1,
+                nextKey = if (hasMore) page + 1 else null
             )
         } catch (e: Exception) {
             LoadResult.Error(e)

@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Compare
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.FlashOn
@@ -68,6 +69,7 @@ import androidx.compose.material.icons.filled.ShutterSpeed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -187,6 +189,9 @@ fun CameraAiScreen(
             onEnhancePhoto = { photo ->
                 viewModel.enhanceSpecificPhoto(photo)
             },
+            onDeletePhoto = { photo ->
+                viewModel.deleteDcimPhoto(photo)
+            },
             modifier = modifier
         )
     } else {
@@ -269,6 +274,9 @@ fun CameraAiScreen(
                 onDismiss = { viewModel.closePhotoPreview() },
                 onEnhance = { photo ->
                     viewModel.enhanceSpecificPhoto(photo)
+                },
+                onDelete = { photo ->
+                    viewModel.deleteDcimPhoto(photo)
                 },
                 isFromCamera = false
             )
@@ -411,12 +419,13 @@ fun StudioWorkspaceContent(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
-    // On-demand pagination trigger: loads the next page only when the user scrolls near the bottom
-    LaunchedEffect(scrollState.value, scrollState.maxValue, dcimLazyPagingItems.itemCount) {
-        if (scrollState.maxValue > 0 && scrollState.value >= scrollState.maxValue - 250) {
-            val count = dcimLazyPagingItems.itemCount
-            if (count > 0 && dcimLazyPagingItems.loadState.append is LoadState.NotLoading) {
-                // Accessing the tail item on-demand requests the next page from Paging 3
+    // On-demand pagination trigger: loads the next page when the user scrolls near the bottom
+    LaunchedEffect(scrollState.value, scrollState.maxValue, dcimLazyPagingItems.itemCount, dcimLazyPagingItems.loadState) {
+        val count = dcimLazyPagingItems.itemCount
+        val appendState = dcimLazyPagingItems.loadState.append
+        if (count > 0 && appendState is LoadState.NotLoading && !appendState.endOfPaginationReached) {
+            if (scrollState.maxValue > 0 && scrollState.value >= (scrollState.maxValue - 600).coerceAtLeast(0)) {
+                // Accessing the tail item requests next page from Paging 3
                 dcimLazyPagingItems[count - 1]
             }
         }
@@ -1158,7 +1167,7 @@ fun DcimPhotoPagingGrid(
                                     color = BentoTheme.colors.textSecondary
                                 )
                             }
-                        } else if (!appendState.endOfPaginationReached && totalLoaded >= 10) {
+                        } else if (!appendState.endOfPaginationReached && totalLoaded >= 1) {
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1168,8 +1177,9 @@ fun DcimPhotoPagingGrid(
                                             pagingItems[totalLoaded - 1]
                                         }
                                     },
-                                color = BentoTheme.colors.purpleContainer.copy(alpha = 0.35f),
-                                shape = RoundedCornerShape(12.dp)
+                                color = BentoTheme.colors.purpleContainer.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary.copy(alpha = 0.25f))
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -1182,13 +1192,13 @@ fun DcimPhotoPagingGrid(
                                         imageVector = Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
                                         tint = BentoTheme.colors.purplePrimary,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Scroll down to load next page on-demand",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
+                                        text = "Load More Photos (${totalLoaded} loaded)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = BentoTheme.colors.purplePrimary
                                     )
                                 }
@@ -1284,11 +1294,65 @@ fun UnifiedPhotoPreviewOverlay(
     photo: CameraPhoto,
     onDismiss: () -> Unit,
     onEnhance: (CameraPhoto) -> Unit,
+    onDelete: ((CameraPhoto) -> Unit)? = null,
     isFromCamera: Boolean = false,
     onOpenStudio: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = {
+                Text(
+                    text = "Delete Photo?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = BentoTheme.colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${photo.displayName}\" from your device storage?",
+                    fontSize = 14.sp,
+                    color = BentoTheme.colors.textSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDelete?.invoke(photo)
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("confirm_delete_dcim_photo_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDeleteConfirmation = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = BentoTheme.colors.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     Box(
         modifier = modifier
@@ -1348,37 +1412,60 @@ fun UnifiedPhotoPreviewOverlay(
                     )
                 }
 
-                if (isFromCamera && onOpenStudio != null) {
-                    IconButton(
-                        onClick = onOpenStudio,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f))
-                            .testTag("preview_open_studio_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Open Studio Gallery",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (onDelete != null) {
+                        IconButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935).copy(alpha = 0.3f))
+                                .testTag("preview_dialog_delete_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Photo",
+                                tint = Color(0xFFFF8A80),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
-                } else {
-                    IconButton(
-                        onClick = { shareUri(context, photo.uri) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f))
-                            .testTag("preview_dialog_share_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
+
+                    if (isFromCamera && onOpenStudio != null) {
+                        IconButton(
+                            onClick = onOpenStudio,
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .testTag("preview_open_studio_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = "Open Studio Gallery",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { shareUri(context, photo.uri) },
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.2f))
+                                .testTag("preview_dialog_share_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
@@ -96,8 +97,8 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
 
-    // In-App CameraX Screen Overlay State
-    private val _isCameraOpen = MutableStateFlow(false)
+    // In-App CameraX Screen Overlay State (Launcher screen on app start)
+    private val _isCameraOpen = MutableStateFlow(true)
     val isCameraOpen: StateFlow<Boolean> = _isCameraOpen.asStateFlow()
 
     // Selected Gallery Photo for Detail & Re-Enhance Inspection
@@ -436,11 +437,45 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
 
     fun deleteEnhancedPhoto(photo: EnhancedPhotoEntity) {
         viewModelScope.launch {
+            try {
+                getApplication<Application>().contentResolver.delete(photo.enhancedUri, null, null)
+            } catch (e: Exception) {
+                Log.e("CameraAiViewModel", "Failed to delete enhanced photo file: ${photo.enhancedUri}", e)
+            }
+            try {
+                if (photo.enhancedUri.scheme == "file" || photo.enhancedUri.path != null) {
+                    val f = java.io.File(photo.enhancedUri.path ?: "")
+                    if (f.exists()) f.delete()
+                }
+            } catch (_: Exception) {}
             dao.delete(photo)
             if (_selectedGalleryPhoto.value?.id == photo.id) {
                 _selectedGalleryPhoto.value = null
             }
-            _saveStatusMessage.value = "Photo removed from AI Gallery."
+            _saveStatusMessage.value = "Photo deleted from AI Gallery."
+        }
+    }
+
+    fun deleteDcimPhoto(photo: CameraPhoto) {
+        viewModelScope.launch {
+            val success = repository.deletePhoto(photo)
+            if (_previewPhoto.value?.id == photo.id || _previewPhoto.value?.uri == photo.uri) {
+                _previewPhoto.value = null
+            }
+            if (latestPhoto.value?.id == photo.id || latestPhoto.value?.uri == photo.uri) {
+                val newLatest = repository.queryLatestCameraPhoto()
+                if (newLatest != null) {
+                    repository.setLatestPhoto(newLatest)
+                } else {
+                    repository.clearLatestPhoto()
+                }
+                if (_enhancementState.value is EnhancementUiState.Success) {
+                    _enhancementState.value = EnhancementUiState.Idle
+                }
+            }
+            refreshDcimPaging()
+            loadDcimPhotos()
+            _saveStatusMessage.value = if (success) "Photo deleted from DCIM." else "Photo removed."
         }
     }
 

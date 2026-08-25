@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FlashAuto
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
@@ -72,6 +73,7 @@ import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -153,6 +155,7 @@ fun CameraCaptureScreen(
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
     onEnhancePhoto: (CameraPhoto) -> Unit = {},
+    onDeletePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
@@ -164,6 +167,7 @@ fun CameraCaptureScreen(
             onOpenGallery = onOpenGallery,
             latestPhoto = latestPhoto,
             onEnhancePhoto = onEnhancePhoto,
+            onDeletePhoto = onDeletePhoto,
             modifier = modifier
         )
     } else {
@@ -182,6 +186,7 @@ private fun CameraViewContent(
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
     onEnhancePhoto: (CameraPhoto) -> Unit = {},
+    onDeletePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -524,7 +529,7 @@ private fun CameraViewContent(
             }
         }
 
-        // Top Controls Bar (Back, Flash, Aspect Ratio, Mirror Selfie, Grid, Switch Camera)
+        // Top Controls Bar (Flash, Aspect Ratio, Mirror Selfie, Grid, Switch Camera)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -535,30 +540,16 @@ private fun CameraViewContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Close / Back Button
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .testTag("camera_close_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Close Camera",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
                 // Top Quick Action Icons (Flash, Aspect Ratio, Mirror Selfie, Grid, Flip Lens)
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     // Flash Toggle Button
                     IconButton(
@@ -735,41 +726,78 @@ private fun CameraViewContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: AI Gallery / Latest Photo Preview Thumbnail
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                        .clickable {
-                            if (latestPhoto != null) {
-                                showThumbnailPreview = true
-                            } else {
-                                onOpenGallery()
-                            }
-                        }
-                        .testTag("camera_gallery_thumbnail"),
-                    contentAlignment = Alignment.Center
+                // Left: AI Gallery / Latest Photo Preview Thumbnail + Studio Dashboard Icon Button
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (latestPhoto != null) {
-                        AsyncImage(
-                            model = latestPhoto.uri,
-                            contentDescription = "Latest Photo",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Gallery",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    // Latest Photo Preview Thumbnail
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (latestPhoto != null) {
+                                    showThumbnailPreview = true
+                                } else {
+                                    onOpenGallery()
+                                }
+                            }
+                            .testTag("camera_gallery_thumbnail"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (latestPhoto != null) {
+                            AsyncImage(
+                                model = latestPhoto.uri,
+                                contentDescription = "Latest Photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = "Gallery",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // Studio Dashboard Button
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(BentoPurplePrimary)
+                            .border(1.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                            .clickable { onOpenGallery() }
+                            .testTag("camera_studio_dashboard_button"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Studio Dashboard",
+                                tint = Color.White,
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Text(
+                                text = "Studio",
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 9.sp
+                            )
+                        }
                     }
                 }
 
@@ -866,6 +894,10 @@ private fun CameraViewContent(
                         showThumbnailPreview = false
                         onClose()
                         onOpenGallery()
+                    },
+                    onDelete = {
+                        onDeletePhoto(latestPhoto)
+                        showThumbnailPreview = false
                     }
                 )
             }
@@ -879,8 +911,64 @@ fun CameraThumbnailPreviewOverlay(
     onDismiss: () -> Unit,
     onEnhance: () -> Unit,
     onOpenStudio: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = {
+                Text(
+                    text = "Delete Photo?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${photo.displayName}\" from your device storage?",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDelete?.invoke()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("confirm_delete_camera_photo_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDeleteConfirmation = false },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                ) {
+                    Text("Cancel", color = Color.White)
+                }
+            },
+            containerColor = Color(0xFF1E1E24),
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -939,20 +1027,43 @@ fun CameraThumbnailPreviewOverlay(
                     )
                 }
 
-                IconButton(
-                    onClick = onOpenStudio,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .testTag("preview_open_studio_button")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = "Open Gallery/Studio",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    if (onDelete != null) {
+                        IconButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935).copy(alpha = 0.3f))
+                                .testTag("camera_preview_delete_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Photo",
+                                tint = Color(0xFFFF8A80),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onOpenStudio,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .testTag("preview_open_studio_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Open Gallery/Studio",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 

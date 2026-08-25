@@ -43,6 +43,30 @@ class CameraCaptureRepository(private val context: Context) {
     private val knownEnhancedIds = java.util.Collections.synchronizedSet(mutableSetOf<Long>())
     private val knownEnhancedNames = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
+    // Persistent blacklist of deleted photo IDs, names, and URIs
+    private val deletedPrefs = context.getSharedPreferences("snapsense_deleted_photos_repo", Context.MODE_PRIVATE)
+    private val deletedPhotoIds = java.util.Collections.synchronizedSet(
+        deletedPrefs.getStringSet("deleted_ids", emptySet())?.mapNotNull { it.toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+    )
+    private val deletedPhotoNames = java.util.Collections.synchronizedSet(
+        deletedPrefs.getStringSet("deleted_names", emptySet())?.toMutableSet() ?: mutableSetOf()
+    )
+    private val deletedPhotoUris = java.util.Collections.synchronizedSet(
+        deletedPrefs.getStringSet("deleted_uris", emptySet())?.map { Uri.parse(it) }?.toMutableSet() ?: mutableSetOf()
+    )
+
+    private fun persistDeletedPhotos() {
+        try {
+            deletedPrefs.edit()
+                .putStringSet("deleted_ids", deletedPhotoIds.map { it.toString() }.toSet())
+                .putStringSet("deleted_names", deletedPhotoNames.toSet())
+                .putStringSet("deleted_uris", deletedPhotoUris.map { it.toString() }.toSet())
+                .apply()
+        } catch (e: Exception) {
+            Log.e("CameraRepository", "Failed to persist deleted photos prefs", e)
+        }
+    }
+
     fun setServiceActive(active: Boolean) {
         _isServiceActive.value = active
     }
@@ -56,6 +80,10 @@ class CameraCaptureRepository(private val context: Context) {
         if (name != null) {
             knownEnhancedNames.add(name)
         }
+    }
+
+    fun clearLatestPhoto() {
+        _latestPhoto.value = null
     }
 
     suspend fun queryLatestCameraPhoto(): CameraPhoto? = withContext(Dispatchers.IO) {
@@ -112,12 +140,15 @@ class CameraCaptureRepository(private val context: Context) {
             )?.use { cursor ->
                 while (cursor.moveToNext()) {
                     val candidate = cursorToPhoto(cursor)
-                    // Strict validation: must be native camera DCIM path, not already enhanced, not in known enhanced set
+                    // Strict validation: must be native camera DCIM path, not enhanced, not deleted
                     if (candidate.isNativeCameraPath &&
                         !candidate.isEnhancedImage &&
                         !knownEnhancedUris.contains(candidate.uri) &&
                         !knownEnhancedIds.contains(candidate.id) &&
-                        !knownEnhancedNames.contains(candidate.displayName)
+                        !knownEnhancedNames.contains(candidate.displayName) &&
+                        !deletedPhotoIds.contains(candidate.id) &&
+                        !deletedPhotoUris.contains(candidate.uri) &&
+                        !deletedPhotoNames.contains(candidate.displayName)
                     ) {
                         photo = candidate
                         break
@@ -185,7 +216,10 @@ class CameraCaptureRepository(private val context: Context) {
                         !candidate.isEnhancedImage &&
                         !knownEnhancedUris.contains(candidate.uri) &&
                         !knownEnhancedIds.contains(candidate.id) &&
-                        !knownEnhancedNames.contains(candidate.displayName)
+                        !knownEnhancedNames.contains(candidate.displayName) &&
+                        !deletedPhotoIds.contains(candidate.id) &&
+                        !deletedPhotoUris.contains(candidate.uri) &&
+                        !deletedPhotoNames.contains(candidate.displayName)
                     ) {
                         list.add(candidate)
                     }
@@ -234,71 +268,29 @@ class CameraCaptureRepository(private val context: Context) {
             val selectionArgs = arrayOf("%DCIM%", "%Camera%", "AI_Enhanced_%", "AI_%")
 
             val list = mutableListOf<CameraPhoto>()
-
-            val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try {
-                    val queryArgs = android.os.Bundle().apply {
-                        putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
-                        putInt(ContentResolver.QUERY_ARG_OFFSET, offset)
-                        putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Images.Media.DATE_ADDED))
-                        putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
-                        putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
-                        putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
-                    }
-                    contentResolver.query(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        projection,
-                        queryArgs,
-                        null
-                    )
-                } catch (_: Exception) {
-                    contentResolver.query(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        projection,
-                        selection,
-                        selectionArgs,
-                        "$sortOrder LIMIT $limit OFFSET $offset"
-                    )
-                }
-            } else {
-                contentResolver.query(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    "$sortOrder LIMIT $limit OFFSET $offset"
-                )
-            }
-
-            cursor?.use { c ->
-                var readCount = 0
-                // If the provider returned rows without applying offset/limit, seek manually
-                if (c.count > limit && c.position == -1 && offset > 0) {
-                    if (c.moveToPosition(offset)) {
-                        do {
-                            val candidate = cursorToPhoto(c)
-                            if (candidate.isNativeCameraPath &&
-                                !candidate.isEnhancedImage &&
-                                !knownEnhancedUris.contains(candidate.uri) &&
-                                !knownEnhancedIds.contains(candidate.id) &&
-                                !knownEnhancedNames.contains(candidate.displayName)
-                            ) {
-                                list.add(candidate)
-                                readCount++
-                            }
-                        } while (readCount < limit && c.moveToNext())
-                    }
-                } else {
-                    while (c.moveToNext() && readCount < limit) {
-                        val candidate = cursorToPhoto(c)
-                        if (candidate.isNativeCameraPath &&
-                            !candidate.isEnhancedImage &&
-                            !knownEnhancedUris.contains(candidate.uri) &&
-                            !knownEnhancedIds.contains(candidate.id) &&
-                            !knownEnhancedNames.contains(candidate.displayName)
-                        ) {
+            contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                sortOrder
+            )?.use { cursor ->
+                var skipped = 0
+                while (cursor.moveToNext() && list.size < limit) {
+                    val candidate = cursorToPhoto(cursor)
+                    if (candidate.isNativeCameraPath &&
+                        !candidate.isEnhancedImage &&
+                        !knownEnhancedUris.contains(candidate.uri) &&
+                        !knownEnhancedIds.contains(candidate.id) &&
+                        !knownEnhancedNames.contains(candidate.displayName) &&
+                        !deletedPhotoIds.contains(candidate.id) &&
+                        !deletedPhotoUris.contains(candidate.uri) &&
+                        !deletedPhotoNames.contains(candidate.displayName)
+                    ) {
+                        if (skipped < offset) {
+                            skipped++
+                        } else {
                             list.add(candidate)
-                            readCount++
                         }
                     }
                 }
@@ -372,6 +364,76 @@ class CameraCaptureRepository(private val context: Context) {
 
     fun setLatestPhoto(photo: CameraPhoto) {
         _latestPhoto.value = photo
+    }
+
+    suspend fun deletePhoto(photo: CameraPhoto): Boolean = withContext(Dispatchers.IO) {
+        // 1. Immediately blacklist so it never appears again in queries or UI
+        deletedPhotoIds.add(photo.id)
+        deletedPhotoNames.add(photo.displayName)
+        deletedPhotoUris.add(photo.uri)
+        persistDeletedPhotos()
+
+        var deleted = false
+
+        // 2. Sample photo / cache removal
+        if (photo.isSample) {
+            try {
+                val sampleFile = File(context.cacheDir, "sample_camera_photo.jpg")
+                if (sampleFile.exists()) {
+                    sampleFile.delete()
+                }
+                deleted = true
+            } catch (_: Exception) {}
+        }
+
+        // 3. File scheme removal
+        if (photo.uri.scheme == "file" || (photo.uri.path != null && !photo.uri.path!!.startsWith("/external/"))) {
+            try {
+                val file = java.io.File(photo.uri.path ?: "")
+                if (file.exists() && file.delete()) {
+                    deleted = true
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 4. Direct ContentResolver delete
+        try {
+            val rows = contentResolver.delete(photo.uri, null, null)
+            if (rows > 0) deleted = true
+        } catch (e: Exception) {
+            Log.w("CameraRepository", "Failed to delete photo from MediaStore: ${photo.uri}", e)
+        }
+
+        // 5. Query DATA path from MediaStore and delete physical file
+        try {
+            contentResolver.query(
+                photo.uri,
+                arrayOf(MediaStore.Images.Media.DATA),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val dataIdx = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
+                    if (dataIdx != -1) {
+                        val filePath = cursor.getString(dataIdx)
+                        if (!filePath.isNullOrBlank()) {
+                            val f = java.io.File(filePath)
+                            if (f.exists() && f.delete()) {
+                                deleted = true
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 6. Refresh latest photo
+        if (_latestPhoto.value?.id == photo.id || _latestPhoto.value?.uri == photo.uri) {
+            _latestPhoto.value = queryLatestCameraPhoto()
+        }
+
+        true
     }
 
     suspend fun queryPhotoByUri(uri: Uri): CameraPhoto? = withContext(Dispatchers.IO) {
