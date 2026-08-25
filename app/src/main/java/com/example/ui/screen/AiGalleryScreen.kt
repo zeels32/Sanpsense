@@ -555,6 +555,7 @@ fun GalleryPhotoDetailDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
+                .padding(vertical = 20.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
@@ -707,7 +708,7 @@ fun GalleryPhotoDetailDialog(
                 exit = fadeOut(),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 32.dp)
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
