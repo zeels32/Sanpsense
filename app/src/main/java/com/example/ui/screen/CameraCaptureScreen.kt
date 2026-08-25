@@ -114,6 +114,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import com.example.data.camera.CameraLensDetector
+import com.example.data.camera.CameraLensPreset
 import com.example.data.model.CameraPhoto
 import com.example.ui.theme.BentoPurplePrimary
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -204,10 +206,22 @@ private fun CameraViewContent(
     var flashScreenEffect by remember { mutableStateOf(false) }
     var showThumbnailPreview by remember { mutableStateOf(false) }
 
-    // Zoom state
+    // Zoom & Hardware Lens state
     var currentZoomRatio by remember { mutableFloatStateOf(1.0f) }
     var minZoomRatio by remember { mutableFloatStateOf(1.0f) }
     var maxZoomRatio by remember { mutableFloatStateOf(8.0f) }
+    var activeLensToast by remember { mutableStateOf<String?>(null) }
+    var activeLensToastJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    // Detect optical / physical camera lenses from hardware (e.g. 0.6x ultra-wide, 1x wide, 2x/3x telephoto)
+    val detectedLenses = remember(lensFacing, minZoomRatio, maxZoomRatio) {
+        CameraLensDetector.detectAvailableLenses(
+            context = context,
+            lensFacing = lensFacing,
+            minZoomRatio = minZoomRatio,
+            maxZoomRatio = maxZoomRatio
+        )
+    }
 
     // Exposure compensation state
     var exposureIndex by remember { mutableIntStateOf(0) }
@@ -228,11 +242,25 @@ private fun CameraViewContent(
     var camera: Camera? by remember { mutableStateOf(null) }
     var previewView: PreviewView? by remember { mutableStateOf(null) }
 
-    // Helper to safely set zoom ratio
-    val setZoom: (Float) -> Unit = { targetRatio ->
+    // Helper to safely set zoom ratio with optional lens feedback
+    val setZoom: (Float, String?) -> Unit = { targetRatio, lensFeedback ->
         val clamped = targetRatio.coerceIn(minZoomRatio, maxZoomRatio)
         currentZoomRatio = clamped
         camera?.cameraControl?.setZoomRatio(clamped)
+
+        val feedbackText = lensFeedback ?: run {
+            val matched = detectedLenses.find { kotlin.math.abs(it.ratio - clamped) < 0.08f }
+            matched?.let { "${it.label} • ${it.lensName}" }
+        }
+
+        if (feedbackText != null) {
+            activeLensToastJob?.cancel()
+            activeLensToastJob = coroutineScope.launch {
+                activeLensToast = feedbackText
+                delay(1800)
+                activeLensToast = null
+            }
+        }
     }
 
     // Helper to safely update exposure compensation
@@ -341,37 +369,47 @@ private fun CameraViewContent(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(lensFacing) {
-                            detectTapGestures { offset ->
-                                focusPoint = offset
-                                setExposure(0)
-                                dragAccumulator = 0f
-                                val pView = previewView ?: return@detectTapGestures
-                                val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
-                                    pView.width.toFloat(),
-                                    pView.height.toFloat()
-                                )
-                                val point = factory.createPoint(offset.x, offset.y)
-                                val action = FocusMeteringAction.Builder(
-                                    point,
-                                    FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-                                )
-                                    .setAutoCancelDuration(4, TimeUnit.SECONDS)
-                                    .build()
+                        .pointerInput(lensFacing, detectedLenses) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    if (detectedLenses.size > 1) {
+                                        val currentIndex = detectedLenses.indexOfFirst { kotlin.math.abs(it.ratio - currentZoomRatio) < 0.12f }
+                                        val nextIndex = if (currentIndex == -1 || currentIndex == detectedLenses.size - 1) 0 else currentIndex + 1
+                                        val nextLens = detectedLenses[nextIndex]
+                                        setZoom(nextLens.ratio, "${nextLens.label} • ${nextLens.lensName}")
+                                    }
+                                },
+                                onTap = { offset ->
+                                    focusPoint = offset
+                                    setExposure(0)
+                                    dragAccumulator = 0f
+                                    val pView = previewView ?: return@detectTapGestures
+                                    val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
+                                        pView.width.toFloat(),
+                                        pView.height.toFloat()
+                                    )
+                                    val point = factory.createPoint(offset.x, offset.y)
+                                    val action = FocusMeteringAction.Builder(
+                                        point,
+                                        FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+                                    )
+                                        .setAutoCancelDuration(4, TimeUnit.SECONDS)
+                                        .build()
 
-                                camera?.cameraControl?.startFocusAndMetering(action)
+                                    camera?.cameraControl?.startFocusAndMetering(action)
 
-                                focusDismissJob?.cancel()
-                                focusDismissJob = coroutineScope.launch {
-                                    focusRingScale = 1.4f
-                                    delay(100)
-                                    focusRingScale = 1.0f
-                                    delay(3500)
-                                    if (focusPoint == offset) {
-                                        focusPoint = null
+                                    focusDismissJob?.cancel()
+                                    focusDismissJob = coroutineScope.launch {
+                                        focusRingScale = 1.4f
+                                        delay(100)
+                                        focusRingScale = 1.0f
+                                        delay(3500)
+                                        if (focusPoint == offset) {
+                                            focusPoint = null
+                                        }
                                     }
                                 }
-                            }
+                            )
                         }
                         .pointerInput(minZoomRatio, maxZoomRatio) {
                             detectTransformGestures { _, _, zoomFactor, _ ->
@@ -699,7 +737,7 @@ private fun CameraViewContent(
             }
         }
 
-        // Bottom Capture Controls Bar with Zoom Presets & Mode Badge
+        // Bottom Capture Controls Bar with Hardware Lens Presets & Mode Badge
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -712,14 +750,50 @@ private fun CameraViewContent(
                 )
                 .padding(bottom = 24.dp, top = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Zoom Selector Pill (1x, 2x presets + live pinch zoom value indicator)
+            // Active Lens Switch HUD Pill Notification
+            AnimatedVisibility(
+                visible = activeLensToast != null,
+                enter = fadeIn(tween(150)) + androidx.compose.animation.scaleIn(initialScale = 0.9f),
+                exit = fadeOut(tween(200)) + androidx.compose.animation.scaleOut(targetScale = 0.9f)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.75f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.4f)),
+                    modifier = Modifier.padding(bottom = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFD700))
+                        )
+                        Text(
+                            text = activeLensToast ?: "",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFFD700)
+                        )
+                    }
+                }
+            }
+
+            // Hardware Camera Lens Preset Selector (e.g. 0.6x, 1x, 2x, 3x, 5x)
             ZoomPresetSelector(
+                lensPresets = detectedLenses,
                 currentZoomRatio = currentZoomRatio,
                 minZoomRatio = minZoomRatio,
                 maxZoomRatio = maxZoomRatio,
-                onSelectZoom = { targetRatio -> setZoom(targetRatio) }
+                onSelectPreset = { preset ->
+                    setZoom(preset.ratio, "${preset.label} • ${preset.lensName}")
+                }
             )
 
             // Capture Row
@@ -1176,49 +1250,42 @@ fun CameraThumbnailPreviewOverlay(
 
 @Composable
 fun ZoomPresetSelector(
+    lensPresets: List<CameraLensPreset>,
     currentZoomRatio: Float,
     minZoomRatio: Float,
     maxZoomRatio: Float,
-    onSelectZoom: (Float) -> Unit,
+    onSelectPreset: (CameraLensPreset) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(22.dp),
-        color = Color.Black.copy(alpha = 0.6f),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Black.copy(alpha = 0.65f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
         modifier = modifier.testTag("zoom_selector_bar")
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Preset 1x Zoom Button
-            ZoomPillButton(
-                label = "1x",
-                targetZoom = 1.0f,
-                currentZoom = currentZoomRatio,
-                onClick = { onSelectZoom(1.0f) },
-                testTag = "zoom_preset_1x"
-            )
+            // Render all detected lenses (e.g. 0.6x, 1x, 2x, 3x, 5x)
+            lensPresets.forEach { preset ->
+                val isSelected = kotlin.math.abs(currentZoomRatio - preset.ratio) < 0.10f
+                ZoomPillButton(
+                    label = preset.label,
+                    isSelected = isSelected,
+                    onClick = { onSelectPreset(preset) },
+                    testTag = "zoom_preset_${preset.label.replace(".", "_")}"
+                )
+            }
 
-            // Preset 2x Zoom Button
-            ZoomPillButton(
-                label = "2x",
-                targetZoom = 2.0f,
-                currentZoom = currentZoomRatio,
-                onClick = { onSelectZoom(2.0f) },
-                testTag = "zoom_preset_2x"
-            )
-
-            // If current zoom is custom (pinch zoomed away from 1x / 2x), display dynamic zoom pill
-            val isCustomZoom = kotlin.math.abs(currentZoomRatio - 1.0f) > 0.15f &&
-                    kotlin.math.abs(currentZoomRatio - 2.0f) > 0.15f
-            if (isCustomZoom) {
+            // If current zoom is custom (pinch zoomed away from all presets), display dynamic zoom badge
+            val isMatchingAnyPreset = lensPresets.any { kotlin.math.abs(currentZoomRatio - it.ratio) < 0.10f }
+            if (!isMatchingAnyPreset) {
                 Surface(
                     shape = CircleShape,
                     color = BentoPurplePrimary,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
@@ -1237,18 +1304,18 @@ fun ZoomPresetSelector(
 @Composable
 private fun ZoomPillButton(
     label: String,
-    targetZoom: Float,
-    currentZoom: Float,
+    isSelected: Boolean,
     onClick: () -> Unit,
     testTag: String
 ) {
-    val isSelected = kotlin.math.abs(currentZoom - targetZoom) < 0.15f
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) Color(0xFFFFD700) else Color.Transparent,
+        animationSpec = tween(durationMillis = 150),
         label = "zoomBgColor"
     )
     val textColor by animateColorAsState(
         targetValue = if (isSelected) Color.Black else Color.White,
+        animationSpec = tween(durationMillis = 150),
         label = "zoomTextColor"
     )
 
@@ -1257,15 +1324,16 @@ private fun ZoomPillButton(
         shape = CircleShape,
         color = backgroundColor,
         modifier = Modifier
-            .size(34.dp)
+            .size(36.dp)
             .testTag(testTag)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 text = label,
-                fontSize = 12.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = textColor
+                fontSize = if (label.length > 3) 10.5.sp else 12.sp,
+                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = textColor,
+                textAlign = TextAlign.Center
             )
         }
     }
