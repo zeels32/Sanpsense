@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Snapsense"
+rootProject.name = "Pixense"
 
 include(":app")

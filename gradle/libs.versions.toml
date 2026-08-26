@@ -1,5 +1,6 @@
 [versions]
 agp = "9.1.1"
+play-services-ads = "23.3.0"
 coreKtx = "1.18.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -42,6 +43,8 @@ hilt = "2.60.1"
 hiltNavigation = "1.2.0"
 
 [libraries]
+play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "play-services-ads" }
+firebase-ads = { group = "com.google.firebase", name = "firebase-ads", version.ref = "play-services-ads" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

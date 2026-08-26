@@ -10,11 +10,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example"
+    namespace = "com.pixense.app"
     compileSdk { version = release(36) { minorApiLevel = 1 } }
 
     defaultConfig {
-        applicationId = "com.aistudio.cameraai.vxqy"
+        applicationId = "com.pixense.app"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -23,13 +23,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    /*signingConfigs {
+    signingConfigs {
       create("release") {
-        val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+        val keystorePath = "${rootDir}/pixense.jks"
         storeFile = file(keystorePath)
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
+        storePassword = System.getenv("") ?: "@Solanki232@"
+        keyAlias = "zeelsolanki"
+        keyPassword = System.getenv("") ?: "@Solanki232@"
       }
       create("debugConfig") {
         storeFile = file("${rootDir}/debug.keystore")
@@ -37,17 +37,17 @@ android {
         keyAlias = "androiddebugkey"
         keyPassword = "android"
       }
-    }*/
+    }
 
-    /*buildTypes {
+    buildTypes {
       release {
         isCrunchPngs = false
         isMinifyEnabled = false
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         signingConfig = signingConfigs.getByName("release")
       }
-      debug { signingConfig = signingConfigs.getByName("debugConfig") }
-    }*/
+//      debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -116,6 +116,8 @@ dependencies {
     // implementation(libs.androidx.credentials.play.services)
     // implementation(libs.googleid)
     implementation(libs.firebase.appcheck.recaptcha)
+//    implementation(libs.play.services.ads)
+    implementation(libs.firebase.ads)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.logging.interceptor)

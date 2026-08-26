@@ -1,8 +1,8 @@
 <resources>
-    <string name="app_name">Snapsense</string>
-    <string name="title_camera_listener">Snapsense Enhancer</string>
+    <string name="app_name">Pixense – AI Camera</string>
+    <string name="title_camera_listener">Pixense Enhancer</string>
     <string name="subtitle_camera_listener">Detects scene type with Gemini LLM and custom-remasters photos</string>
-    <string name="service_running_title">Snapsense Service Active</string>
+    <string name="service_running_title">Pixense Service Active</string>
     <string name="service_running_desc">Listening for new camera photos in background…</string>
     <string name="new_photo_detected_title">New Camera Photo Captured!</string>
     <string name="new_photo_detected_desc">Tap to auto-detect scene and remaster with Gemini AI</string>
@@ -26,7 +26,7 @@
     <string name="settings_auto_process_title">Auto DCIM Capture Monitoring</string>
     <string name="settings_auto_process_desc">Listen for new photos taken by device camera and automatically queue for Gemini AI remastering</string>
     <string name="settings_ai_engine_title">AI Remastering Engine</string>
-    <string name="settings_about_title">About Snapsense</string>
+    <string name="settings_about_title">About Pixense</string>
     <string name="auto_process_title">Auto-Enhance Captures</string>
     <string name="auto_process_desc">Auto-classify scene &amp; remaster with Gemini as soon as captured</string>
     <string name="gallery_title">AI Enhanced Gallery</string>
