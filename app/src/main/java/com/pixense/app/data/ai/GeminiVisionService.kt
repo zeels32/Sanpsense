@@ -54,12 +54,10 @@ object GeminiVisionService {
     // Supported Gemini Image & Vision models
     private val TEXT_DETECTION_MODELS = listOf(
         "gemini-3.5-flash",
-        "gemini-3.1-flash-lite-preview",
         "gemini-2.5-flash-image"
     )
 
     private val CANDIDATE_IMAGE_MODELS = listOf(
-        "gemini-3.1-flash-image-preview",
         "gemini-3.1-flash-image",
         "gemini-2.5-flash-image"
     )
@@ -75,7 +73,82 @@ object GeminiVisionService {
         .build()
 
     // LRU Cache for processed enhancements
-    private val resultCache = LruCache<String, com.pixense.app.data.ai.GeminiEnhancementResult>(15)
+    private val resultCache = LruCache<String, GeminiEnhancementResult>(15)
+
+    private fun buildSceneDetectionPrompt(): String = """
+        You are a Photography AI Scene Classifier.
+        Inspect the image and classify it into exactly one of these categories:
+        1. PORTRAIT
+        2. LOW_LIGHT
+        3. FOOD
+        4. TEXTURE_MACRO
+        5. LANDSCAPE_NATURE
+        6. ARCHITECTURE_URBAN
+        7. DOCUMENT_TEXT
+        8. GENERAL_AUTO
+
+        Use the image content, not assumptions. If the image is a person/selfie/face, choose PORTRAIT.
+        If it is night, dark indoors, or shadow-heavy, choose LOW_LIGHT.
+        If it is dish/meal/beverage, choose FOOD.
+        If it is close-up texture/details, choose TEXTURE_MACRO.
+        If it is outdoor scenery or natural environment, choose LANDSCAPE_NATURE.
+        If it is building/city/interior architecture, choose ARCHITECTURE_URBAN.
+        If it is paper/receipt/document/text, choose DOCUMENT_TEXT.
+        Otherwise choose GENERAL_AUTO.
+
+        Respond with a single valid JSON object and nothing else:
+        {
+          "category": "PORTRAIT|LOW_LIGHT|FOOD|TEXTURE_MACRO|LANDSCAPE_NATURE|ARCHITECTURE_URBAN|DOCUMENT_TEXT|GENERAL_AUTO",
+          "confidence": 95,
+          "detectedElements": ["element1", "element2", "element3"],
+          "lightingCondition": "Backlit Golden Hour / Low Light Shadows / Studio Softbox",
+          "noiseAndBlurAssessment": "Minor camera shake blur / ISO noise in shadow / Clean optical focus",
+          "tailoredCorrectionPlan": "Brief 1-sentence photo remaster plan tailored to this scene"
+        }
+    """.trimIndent()
+
+    private fun buildEnhancementPrompt(detection: SceneDetectionResult): String = """
+        Role: Master Mobile Photography AI Restorer.
+
+        Objective: Produce a premium-quality, natural-looking enhancement of this photo with cleaner detail,
+        realistic color, balanced exposure, and stronger structure while preserving the original scene,
+        identity, composition, and subject integrity.
+
+        Detected Scene: ${detection.category.title} (${detection.confidence}% confidence)
+        Scene Elements: ${detection.detectedElements.joinToString(", ")}
+        Lighting Condition: ${detection.lightingCondition}
+        Noise & Blur Status: ${detection.noiseAndBlurAssessment}
+
+        Scene-specific instructions:
+        ${detection.category.promptFocus}
+        ${detection.tailoredCorrectionPlan}
+
+        Critical quality rules:
+        1. Preserve facial identity, anatomy, eyes, skin texture, and overall composition exactly as the source image.
+        2. Keep the output realistic and natural—no cartoon look, no artificial plastic skin, no excessive smoothing, and no neon color grading.
+        3. Remove sensor noise, grain, and motion blur while retaining natural detail and clean textures.
+        4. Restore highlights, deep shadow detail, and local contrast without clipping or burning out bright areas.
+        5. Preserve natural skin tones, foliage, sky tones, and product colors.
+        6. Improve sharpness subtly and realistically; avoid oversharpen halos or edge artifacts.
+        7. Maintain the original aspect ratio and native photo composition.
+        8. Enhance color fidelity and dynamic range naturally; do not exaggerate saturation.
+
+        Format your output as an enhanced image that looks like a clean, professional mobile photograph.
+        If a text summary is included, keep it to a compact JSON object only, not markdown fences.
+
+        JSON metrics to include in the text summary:
+        {
+          "sceneType": "${detection.category.title}",
+          "lightingScore": 88,
+          "dynamicRange": "HDR Optimized",
+          "colorTone": "Natural Vibrant",
+          "aiInsight": "Classified as ${detection.category.title}. Restored details: ${detection.tailoredCorrectionPlan}",
+          "sharpnessScore": 92,
+          "noiseReductionScore": 95,
+          "blurReductionScore": 94,
+          "resolutionUpscale": "4K Photo-Quality (Native Aspect)"
+        }
+    """.trimIndent()
 
     fun isNetworkAvailable(context: Context): Boolean {
         return try {
@@ -194,29 +267,7 @@ object GeminiVisionService {
 
         val apiKey = getApiKey()
         val base64Image = scaleAndEncodeBitmap(bitmap, maxDimension = 512)
-
-        val detectionPrompt = """
-            You are a Photography AI Scene Classifier.
-            Inspect the image and categorize it strictly into one of the following exact categories:
-            1. PORTRAIT (human face, selfie, person, people)
-            2. LOW_LIGHT (night, dark room, high noise, shadows)
-            3. FOOD (culinary, dish, beverage, meal)
-            4. TEXTURE_MACRO (close-up details, fabric, wood grain, fine textures, surface pattern)
-            5. LANDSCAPE_NATURE (outdoor, mountain, forest, plants, sky, sea)
-            6. ARCHITECTURE_URBAN (buildings, city, street, interior rooms)
-            7. DOCUMENT_TEXT (text, receipt, paper, notes)
-            8. GENERAL_AUTO (any other scene)
-
-            Respond ONLY with a valid JSON object matching this schema:
-            {
-              "category": "PORTRAIT|LOW_LIGHT|FOOD|TEXTURE_MACRO|LANDSCAPE_NATURE|ARCHITECTURE_URBAN|DOCUMENT_TEXT|GENERAL_AUTO",
-              "confidence": 95,
-              "detectedElements": ["element1", "element2", "element3"],
-              "lightingCondition": "e.g. Backlit Golden Hour / Low Light Shadows / Studio Softbox",
-              "noiseAndBlurAssessment": "e.g. Minor camera shake blur / ISO noise in shadow / Clean optical focus",
-              "tailoredCorrectionPlan": "Brief 1-sentence photo remaster plan tailored to this scene"
-            }
-        """.trimIndent()
+        val detectionPrompt = buildSceneDetectionPrompt()
 
         val jsonBody = JSONObject().apply {
             val contents = JSONArray().apply {
@@ -344,36 +395,7 @@ object GeminiVisionService {
 
         try {
             val base64Image = scaleAndEncodeBitmap(bitmap, maxDimension = 896)
-
-            val promptText = """
-                Role: Master Mobile Photography AI Restorer.
-                Detected Scene: ${detection.category.title} (${detection.confidence}% confidence)
-                Scene Elements: ${detection.detectedElements.joinToString(", ")}
-                Lighting Condition: ${detection.lightingCondition}
-                Noise & Blur Status: ${detection.noiseAndBlurAssessment}
-                
-                Specific Enhancement Directives for this Detected Scene:
-                ${detection.category.promptFocus}
-                ${detection.tailoredCorrectionPlan}
-
-                Universal Restoration Instructions:
-                1. Strictly maintain structural geometry, composition, human subjects, facial landmarks, and identity from the reference image.
-                2. Eliminate camera shake, motion blur, and digital sensor noise.
-                3. Deliver ultra-clean 4K native-aspect photography output.
-                
-                Also provide scene restoration JSON metrics matching:
-                {
-                  "sceneType": "${detection.category.title}",
-                  "lightingScore": 88,
-                  "dynamicRange": "HDR Optimized",
-                  "colorTone": "Natural Vibrant",
-                  "aiInsight": "Classified as ${detection.category.title}. Restored details: ${detection.tailoredCorrectionPlan}",
-                  "sharpnessScore": 92,
-                  "noiseReductionScore": 95,
-                  "blurReductionScore": 94,
-                  "resolutionUpscale": "4K Photo-Quality (Native Aspect)"
-                }
-            """.trimIndent()
+            val promptText = buildEnhancementPrompt(detection)
 
             val jsonBody = JSONObject().apply {
                 val contents = JSONArray().apply {
