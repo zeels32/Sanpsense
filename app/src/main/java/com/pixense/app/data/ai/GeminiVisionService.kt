@@ -107,6 +107,86 @@ object GeminiVisionService {
         }
     """.trimIndent()
 
+    private fun getSceneSpecificEnhancementGuidance(category: DetectedSceneCategory): String = when (category) {
+        DetectedSceneCategory.PORTRAIT -> """
+            PORTRAIT ENHANCEMENT PROTOCOL:
+            - Preserve exact facial identity, eye clarity, and natural skin texture (NO skin smoothing).
+            - Maintain realistic skin tone—warm shadows without orange cast, neutral highlights.
+            - Enhance eye sharpness and catch-light while preserving iris detail and eyelash texture.
+            - Gently lift shadows in under-eye areas and cheekbones for definition without aging effect.
+            - Soften background blur (bokeh) if present, but keep subject edges crisp.
+            - Avoid any plastic, airbrushed, or skin-tone deviation.
+            - Target: Professional portrait quality with natural skin detail intact.
+        """
+        DetectedSceneCategory.LOW_LIGHT -> """
+            LOW LIGHT & NIGHT ENHANCEMENT PROTOCOL:
+            - Aggressively reduce ISO sensor noise and video grain without losing detail.
+            - Carefully lift shadow details while maintaining contrast and avoiding washed-out look.
+            - Preserve bright light sources (street lights, neon, moon) without blooming or clipping.
+            - Maintain natural shadow color temperature (slightly cool, not yellow-cast).
+            - Avoid noise reduction that makes the image look plastic or overly soft.
+            - Target: Cleaned-up night photos that feel captured at true exposure, not artificially brightened.
+        """
+        DetectedSceneCategory.FOOD -> """
+            FOOD & CULINARY ENHANCEMENT PROTOCOL:
+            - Enhance appetizing warmth in dish colors without oversaturation.
+            - Bring out sauce texture, garnish sharpness, and glistening liquid surfaces.
+            - Boost warm color temperature slightly (3500–4500K) to activate appetite appeal.
+            - Add subtle local contrast to pop dish depth and layering.
+            - Enhance food texture: crispness, crust detail, sauce gloss.
+            - Maintain background soft without destroying context.
+            - Target: Restaurant-quality food photo with natural color and appetizing depth.
+        """
+        DetectedSceneCategory.TEXTURE_MACRO -> """
+            MACRO & TEXTURE ENHANCEMENT PROTOCOL:
+            - Maximize micro-contrast and edge clarity for fine surface details.
+            - Restore intricate surface grain: wood texture, fabric weave, skin pores, plant details.
+            - Remove macro blur while preserving 3D depth perception.
+            - Enhance high-frequency detail without introducing artificial noise or halos.
+            - Boost color saturation of fine details to stand out cleanly.
+            - Target: Razor-sharp, textured close-ups that reveal surface micro-geometry.
+        """
+        DetectedSceneCategory.LANDSCAPE_NATURE -> """
+            LANDSCAPE & NATURE ENHANCEMENT PROTOCOL:
+            - Maximize dynamic range: recover sky texture while preserving ground detail.
+            - Boost foliage greens and sky blues subtly without neon oversaturation.
+            - Reduce atmospheric haze and enhance distant clarity.
+            - Increase midtone contrast to separate foreground, middle, and background.
+            - Preserve natural color balance: avoid green shift or blue channel bloat.
+            - Enhance cloud detail and sunset color depth if present.
+            - Target: Expansive, clean landscapes with recovered sky and vivid foliage.
+        """
+        DetectedSceneCategory.ARCHITECTURE_URBAN -> """
+            ARCHITECTURE & URBAN ENHANCEMENT PROTOCOL:
+            - Sharpen geometric building edges and structural lines crisply.
+            - Increase contrast on architectural elements: windows, doors, surfaces.
+            - Enhance reflections on glass and metal without blown-out glare.
+            - Balance exposure on large surfaces to avoid uneven lighting.
+            - Maintain straight lines and avoid distortion; respect original composition geometry.
+            - Enhance material texture: brick, stone, metal finish detail.
+            - Target: Clean, structured urban photos with crisp lines and material depth.
+        """
+        DetectedSceneCategory.DOCUMENT_TEXT -> """
+            DOCUMENT & TEXT ENHANCEMENT PROTOCOL:
+            - Maximize contrast between text/content and background (high optical density).
+            - Remove paper glare, creases, and shadow banding.
+            - Sharpen text edges for maximum legibility and clarity.
+            - Correct white balance to achieve true paper white.
+            - Remove document skew, if present, to restore alignment.
+            - Enhance foreground text sharpness while preserving background context.
+            - Target: Crisp, scan-quality document capture with legible typography.
+        """
+        DetectedSceneCategory.GENERAL_AUTO -> """
+            GENERAL AUTO ENHANCEMENT PROTOCOL:
+            - Apply balanced restoration: noise cleanup, clarity boost, mild saturation lift.
+            - Enhance overall sharpness subtly for crisp, clean output.
+            - Recover blown-out highlights and crushed shadow detail where possible.
+            - Ensure natural color fidelity without shift or cast.
+            - Maintain composition and subject integrity exactly.
+            - Target: Clean, professional photo that looks naturally improved but not over-edited.
+        """
+    }
+
     private fun buildEnhancementPrompt(detection: SceneDetectionResult): String = """
         Role: Master Mobile Photography AI Restorer.
 
@@ -119,34 +199,43 @@ object GeminiVisionService {
         Lighting Condition: ${detection.lightingCondition}
         Noise & Blur Status: ${detection.noiseAndBlurAssessment}
 
-        Scene-specific instructions:
-        ${detection.category.promptFocus}
+        SPECIALIZED SCENE ENHANCEMENT PROTOCOL:
+        ${getSceneSpecificEnhancementGuidance(detection.category)}
+
+        Additional tailored focus:
         ${detection.tailoredCorrectionPlan}
 
-        Critical quality rules:
-        1. Preserve facial identity, anatomy, eyes, skin texture, and overall composition exactly as the source image.
-        2. Keep the output realistic and natural—no cartoon look, no artificial plastic skin, no excessive smoothing, and no neon color grading.
-        3. Remove sensor noise, grain, and motion blur while retaining natural detail and clean textures.
-        4. Restore highlights, deep shadow detail, and local contrast without clipping or burning out bright areas.
-        5. Preserve natural skin tones, foliage, sky tones, and product colors.
-        6. Improve sharpness subtly and realistically; avoid oversharpen halos or edge artifacts.
-        7. Maintain the original aspect ratio and native photo composition.
-        8. Enhance color fidelity and dynamic range naturally; do not exaggerate saturation.
+        UNIVERSAL RESTORATION COMMANDMENTS (Non-negotiable):
+        1. IDENTITY PRESERVATION: Maintain exact facial identity, anatomy, human likeness, composition layout, and scene structure.
+        2. REALISM MANDATE: Output must look like a naturally-enhanced photograph—NEVER cartoon, plastic, stylized, or over-processed.
+        3. NOISE ELIMINATION: Remove sensor noise, grain, and motion blur while preserving texture detail and edge sharpness.
+        4. TONAL BALANCE: Restore highlights without clipping; lift shadow detail without crushing; maintain smooth gradations.
+        5. COLOR FIDELITY: Preserve natural skin tones, foliage greens, sky blues, and subject colors—NO neon, NO oversaturation, NO unnatural hue shifts.
+        6. SHARPNESS PROTOCOL: Enhance edge clarity subtly and realistically; NO over-sharpen halos, NO artificial edge artifacts, NO pinging.
+        7. COMPOSITION LOYALTY: Maintain original aspect ratio, framing, composition, and subject alignment exactly.
+        8. NATURAL ENHANCEMENT: Boost clarity, dynamic range, and color depth naturally as if captured in optimal lighting—NOT AI-stylized.
 
-        Format your output as an enhanced image that looks like a clean, professional mobile photograph.
-        If a text summary is included, keep it to a compact JSON object only, not markdown fences.
+        CRITICAL ANTI-ARTIFACT RULES:
+        - NO plasticity or wax-like texture (especially skin).
+        - NO excessive smoothing or pore elimination.
+        - NO unrealistic color grading or trendy filters.
+        - NO blown-out skies or crushed shadows.
+        - NO noise reduction that obliterates detail.
+        - NO unnatural contrast or local posterization.
 
-        JSON metrics to include in the text summary:
+        Output format: Enhanced image + compact JSON summary (no markdown fences).
+
+        JSON metrics summary:
         {
           "sceneType": "${detection.category.title}",
           "lightingScore": 88,
-          "dynamicRange": "HDR Optimized",
-          "colorTone": "Natural Vibrant",
-          "aiInsight": "Classified as ${detection.category.title}. Restored details: ${detection.tailoredCorrectionPlan}",
+          "dynamicRange": "Naturally Recovered",
+          "colorTone": "Authentic & Balanced",
+          "aiInsight": "Detected ${detection.category.title}. Applied Scene-Specific Protocol: ${detection.tailoredCorrectionPlan}",
           "sharpnessScore": 92,
           "noiseReductionScore": 95,
           "blurReductionScore": 94,
-          "resolutionUpscale": "4K Photo-Quality (Native Aspect)"
+          "naturalness": "Professional Mobile Photography"
         }
     """.trimIndent()
 
@@ -242,6 +331,53 @@ object GeminiVisionService {
         val saturation: Float,
         val heuristicCategory: DetectedSceneCategory
     )
+
+    /**
+     * Build a refinement pass prompt to polish the enhanced image for maximum quality.
+     * This is called after initial enhancement to catch any over-processing or artifacts.
+     */
+    private fun buildRefinementPrompt(detection: SceneDetectionResult): String = """
+        Role: Quality Assurance & Detail Refinement Specialist.
+
+        Task: Review and refine an AI-enhanced photograph to ensure MAXIMUM natural quality and detail clarity.
+        
+        Detected Scene Category: ${detection.category.title}
+        Current Lighting Assessment: ${detection.lightingCondition}
+        
+        CRITICAL QUALITY GATE CHECKS:
+        1. AUTHENTICITY SCAN: Verify the image looks naturally photographed, NOT over-processed or AI-stylized.
+        2. DETAIL PRESERVATION: Confirm fine details, textures, and edges are crisp and natural—NO blur, NO halos.
+        3. ARTIFACT REMOVAL: Eliminate any noise reduction artifacts, posterization, or color banding.
+        4. SKIN/SUBJECT INTEGRITY: If portrait: verify skin retains natural pore detail and realistic texture (NO plastic/wax appearance).
+        5. COLOR BALANCE: Confirm colors are natural and faithful—NO unwanted color casts, NO neon tints, NO oversaturation.
+        6. TONAL SMOOTHNESS: Check highlights and shadows are smooth and gradual—NO clipping, NO crushing, NO harsh transitions.
+        7. EDGE QUALITY: Verify all edges are clean and natural—NO artificial sharpening halos, NO edge artifacts.
+        8. OVERALL COHESION: Ensure the enhancement is uniform in quality across the entire frame.
+
+        REFINEMENT ACTIONS (apply only if needed):
+        - Subtle local contrast boost to enhance micro-detail visibility.
+        - Gentle clarity enhancement on textured areas (fabric, skin, surface patterns).
+        - Minimal saturation fine-tuning to hit natural, appetizing color tone.
+        - Edge smoothing on any remaining over-sharpening artifacts.
+        - Very subtle shadow/highlight balancing if tones appear uneven.
+
+        STRICT CONSTRAINTS:
+        - MAINTAIN the original enhanced composition and subject position exactly.
+        - PRESERVE all detail gains from the first enhancement pass.
+        - AVOID any additional heavy processing—refinement only.
+        - NEVER alter colors, hue, or tones—only balance existing colors.
+        - Output must still look like a natural photograph, NOT AI-filtered.
+
+        Deliver the refined image with these metrics:
+        {
+          "refinementApplied": true,
+          "qualityGate": "PASSED",
+          "refinementFocus": "Brief 1-2 sentence summary of refinements applied",
+          "finalScore": 95,
+          "naturalness": "Professional Mobile Photography",
+          "readyForDelivery": true
+        }
+    """.trimIndent()
 
     /**
      * Stage 1: Scene & Subject Detection using Gemini LLM.

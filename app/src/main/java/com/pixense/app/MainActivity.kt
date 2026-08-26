@@ -36,12 +36,12 @@ class MainActivity : ComponentActivity() {
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
             val isSystemDark = isSystemInDarkTheme()
             val useDarkTheme = when (themeMode) {
-                _root_ide_package_.com.pixense.app.data.model.ThemeMode.SYSTEM -> isSystemDark
-                _root_ide_package_.com.pixense.app.data.model.ThemeMode.LIGHT -> false
-                _root_ide_package_.com.pixense.app.data.model.ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> isSystemDark
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
             }
 
-            _root_ide_package_.com.pixense.app.ui.theme.MyApplicationTheme(darkTheme = useDarkTheme) {
+            MyApplicationTheme(darkTheme = useDarkTheme) {
                 // Determine permissions based on API level
                 val permissionsToRequest = buildList {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -52,13 +52,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val permissionsState =
-                    rememberMultiplePermissionsState(permissions = permissionsToRequest)
+                val permissionsState = rememberMultiplePermissionsState(permissions = permissionsToRequest)
 
                 LaunchedEffect(permissionsState.allPermissionsGranted) {
                     if (permissionsState.allPermissionsGranted) {
                         if (viewModel.isAutoProcessEnabled.value) {
-                            _root_ide_package_.com.pixense.app.service.CameraCaptureService.start(this@MainActivity)
+                            CameraCaptureService.start(this@MainActivity)
                         }
                         viewModel.refreshLatestPhoto()
                     } else {
@@ -67,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    _root_ide_package_.com.pixense.app.ui.screen.CameraAiScreen(viewModel = viewModel)
+                    CameraAiScreen(viewModel = viewModel)
                 }
             }
         }

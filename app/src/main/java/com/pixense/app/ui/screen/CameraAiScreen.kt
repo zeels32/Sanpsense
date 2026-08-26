@@ -1553,7 +1553,8 @@ fun UnifiedPhotoPreviewOverlay(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
+                // Zoomable preview so users can pinch-to-zoom and pan the image
+                com.pixense.app.ui.view.ZoomableAsyncImage(
                     model = photo.uri,
                     contentDescription = photo.displayName,
                     modifier = Modifier.fillMaxSize(),

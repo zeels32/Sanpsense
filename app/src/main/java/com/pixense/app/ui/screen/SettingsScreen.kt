@@ -82,11 +82,11 @@ fun SettingsScreen(
         )
 
         // 2. DCIM Camera Monitoring & Auto-Remaster Toggle Card
-        CameraMonitoringSettingsCard(
+        /*CameraMonitoringSettingsCard(
             isAutoProcessEnabled = isAutoProcessEnabled,
             isServiceActive = isServiceActive,
             onToggleAutoProcess = { enabled -> viewModel.setAutoProcessEnabled(enabled) }
-        )
+        )*/
 
         // 3. AI Remastering Engine Details Card
 //        AiEngineDetailsCard()

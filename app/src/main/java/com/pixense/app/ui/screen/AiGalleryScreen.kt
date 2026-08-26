@@ -568,8 +568,8 @@ fun GalleryPhotoDetailDialog(
         ) {
             val activeUri = if (isHoldingOriginal) photo.originalUri else photo.enhancedUri
 
-            // Full Screen Image Preview
-            AsyncImage(
+            // Full Screen Image Preview (pinch-to-zoom + pan + double-tap)
+            com.pixense.app.ui.view.ZoomableAsyncImage(
                 model = activeUri,
                 contentDescription = "Photo Preview",
                 contentScale = ContentScale.Fit,

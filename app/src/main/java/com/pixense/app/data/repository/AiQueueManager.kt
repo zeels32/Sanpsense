@@ -39,7 +39,7 @@ class AiQueueManager private constructor(private val context: Context) {
     val queue: StateFlow<List<EnhancementQueueItem>> = _queue.asStateFlow()
 
     private val _isAutoProcessEnabled = MutableStateFlow(
-        sharedPrefs.getBoolean(KEY_AUTO_PROCESS, true)
+        sharedPrefs.getBoolean(KEY_AUTO_PROCESS, false)
     )
     val isAutoProcessEnabled: StateFlow<Boolean> = _isAutoProcessEnabled.asStateFlow()
 
