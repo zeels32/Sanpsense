@@ -1,3 +1,4 @@
+import com.android.build.gradle.internal.cxx.configure.gradleLocalProperties
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -17,10 +18,15 @@ android {
         applicationId = "com.pixense.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Read proAdUnitId from local.properties
+        val localProperties = gradleLocalProperties(rootDir, providers)
+        val proAdUnitId = localProperties.getProperty("proAdUnitId")
+        buildConfigField("String", "PRO_AD_UNIT_ID", "\"$proAdUnitId\"")
     }
 
     signingConfigs {

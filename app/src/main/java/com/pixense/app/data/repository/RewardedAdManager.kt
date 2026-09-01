@@ -32,12 +32,9 @@ class RewardedAdManager private constructor(private val context: Context) {
     // Official Google Test Rewarded Ad Unit ID
     // https://developers.google.com/admob/android/test-ads#demo-units
     private val testAdUnitId = "ca-app-pub-3940256099942544/5224354917"
-    
-    // Production Ad Unit ID (configurable, e.g. from String resources or BuildConfig)
-    private val prodAdUnitId = "ca-app-pub-1464253620326405/4111138926"
 
     private val adUnitId: String
-        get() = if (BuildConfig.DEBUG) testAdUnitId else prodAdUnitId
+        get() = if (BuildConfig.DEBUG) testAdUnitId else BuildConfig.PRO_AD_UNIT_ID
 
     init {
         // Initialize Mobile Ads SDK
