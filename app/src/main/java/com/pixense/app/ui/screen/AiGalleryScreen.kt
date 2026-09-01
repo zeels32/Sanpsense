@@ -83,6 +83,7 @@ import com.pixense.app.R
 import com.pixense.app.data.db.EnhancedPhotoEntity
 import com.pixense.app.data.model.EnhancementPreset
 import com.pixense.app.ui.theme.BentoTheme
+import com.pixense.app.ui.view.ZoomableAsyncImage
 import com.pixense.app.ui.viewmodel.CameraAiViewModel
 import com.pixense.app.ui.viewmodel.StudioTab
 import java.text.SimpleDateFormat
@@ -476,13 +477,13 @@ fun GalleryPhotoCard(
 fun GalleryPhotoDetailDialog(
     photo: EnhancedPhotoEntity,
     onDismiss: () -> Unit,
-    onReEnhance: (EnhancementPreset) -> Unit,
-    onOpenInStudio: () -> Unit,
+    onReEnhance: ((EnhancementPreset) -> Unit)? = null,
+    onOpenInStudio: (() -> Unit)? = null,
     onDelete: () -> Unit,
     onShare: () -> Unit
 ) {
     var isHoldingOriginal by remember { mutableStateOf(false) }
-    var isOverlayVisible by remember { mutableStateOf(true) }
+    var isShowingOriginal by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     if (showDeleteConfirmation) {
@@ -536,14 +537,6 @@ fun GalleryPhotoDetailDialog(
         )
     }
 
-    // Auto-hide floating information overlay after 3.5 seconds of inactivity
-    LaunchedEffect(isOverlayVisible, isHoldingOriginal) {
-        if (isOverlayVisible && !isHoldingOriginal) {
-            delay(3500)
-            isOverlayVisible = false
-        }
-    }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -552,12 +545,8 @@ fun GalleryPhotoDetailDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .padding(vertical = 20.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onTap = {
-                            isOverlayVisible = !isOverlayVisible
-                        },
                         onPress = {
                             isHoldingOriginal = true
                             tryAwaitRelease()
@@ -566,40 +555,41 @@ fun GalleryPhotoDetailDialog(
                     )
                 }
         ) {
-            val activeUri = if (isHoldingOriginal) photo.originalUri else photo.enhancedUri
+            val isOriginal = isHoldingOriginal || isShowingOriginal
+            val activeUri = if (isOriginal) photo.originalUri else photo.enhancedUri
 
             // Full Screen Image Preview (pinch-to-zoom + pan + double-tap)
-            com.pixense.app.ui.view.ZoomableAsyncImage(
+            ZoomableAsyncImage(
                 model = activeUri,
                 contentDescription = "Photo Preview",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Hold-to-Compare Indicator Badge (Always visible or on compare)
-            if (isHoldingOriginal) {
+            // Hold / Tap-to-Compare Indicator Badge Pill
+            if (isOriginal) {
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.Black.copy(alpha = 0.85f),
-                    border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.6f))
+                        .align(Alignment.TopCenter)
+                        .padding(top = 90.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF1F2937).copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Photo,
+                            imageVector = Icons.Default.Compare,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(15.dp)
                         )
                         Text(
-                            text = "ORIGINAL RAW CAPTURE",
-                            fontSize = 13.sp,
+                            text = "ORIGINAL RAW CAPTURE (BEFORE)",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -607,304 +597,107 @@ fun GalleryPhotoDetailDialog(
                 }
             }
 
-            // Top Floating Action Bar Overlay
-            AnimatedVisibility(
-                visible = isOverlayVisible,
-                enter = fadeIn() + slideInVertically { -it },
-                exit = fadeOut() + slideOutVertically { -it },
+            // Top Floating Action Bar Toolbar (Permanent, stays at the top, never auto-hides)
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
+                    .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 24.dp)
+                    .padding(horizontal = 16.dp, vertical = 64.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Black.copy(alpha = 0.75f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.Black.copy(alpha = 0.65f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
+                    IconButton(
+                        onClick = onDismiss,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.15f))
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = photo.enhancedDisplayName,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = if (isOriginal) "Original RAW Capture" else "Gemini AI Remastered • ${photo.sceneType.uppercase()}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isOriginal) Color(0xFFFBBF24) else Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         IconButton(
-                            onClick = onDismiss,
+                            onClick = { isShowingOriginal = !isShowingOriginal },
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(if (isShowingOriginal) Color(0xFFF59E0B).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.15f))
+                                .testTag("gallery_compare_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Compare,
+                                contentDescription = "Toggle Before/After Comparison",
+                                tint = if (isShowingOriginal) Color(0xFFFBBF24) else Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onShare,
+                            modifier = Modifier
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.15f))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color.White
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = Color.White,
+                                modifier = Modifier.size(17.dp)
                             )
                         }
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                        IconButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935).copy(alpha = 0.3f))
+                                .testTag("gallery_delete_button")
                         ) {
-                            Text(
-                                text = photo.enhancedDisplayName,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete from AI Gallery",
+                                tint = Color(0xFFFF8A80),
+                                modifier = Modifier.size(17.dp)
                             )
-                            Text(
-                                text = "Gemini AI Remastered • ${photo.sceneType.uppercase()}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            IconButton(
-                                onClick = onShare,
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.15f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-                            IconButton(
-                                onClick = { showDeleteConfirmation = true },
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFE53935).copy(alpha = 0.3f))
-                                    .testTag("gallery_delete_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete from AI Gallery",
-                                    tint = Color(0xFFFF8A80),
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
                         }
                     }
                 }
             }
-
-            // Subtle Hint Chip when Overlay is Hidden
-            AnimatedVisibility(
-                visible = !isOverlayVisible && !isHoldingOriginal,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.Black.copy(alpha = 0.5f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Compare,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.8f),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = "Tap for details • Hold to compare original",
-                            fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                    }
-                }
-            }
-
-            // Bottom Floating Information & Controls Card Overlay
-            AnimatedVisibility(
-                visible = isOverlayVisible,
-                enter = fadeIn() + slideInVertically { it },
-                exit = fadeOut() + slideOutVertically { it },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 20.dp)
-            ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E222B).copy(alpha = 0.92f)),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // AI Insights Banner
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF673AB7)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Gemini AI Scene Intelligence",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = photo.aiInsight,
-                                    fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    lineHeight = 15.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        // Metrics Pill Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            MetricPill(
-                                label = "Scene",
-                                value = photo.sceneType,
-                                modifier = Modifier.weight(1f)
-                            )
-                            MetricPill(
-                                label = "Sharpness",
-                                value = "${photo.sharpnessScore}%",
-                                modifier = Modifier.weight(1f)
-                            )
-                            MetricPill(
-                                label = "Lighting",
-                                value = "${photo.lightingScore}%",
-                                modifier = Modifier.weight(1f)
-                            )
-                            MetricPill(
-                                label = "Quality",
-                                value = "4K Restored",
-                                modifier = Modifier.weight(1.1f)
-                            )
-                        }
-
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-
-                        // Actions Row: Open in Studio & Re-Enhance
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = onOpenInStudio,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Open Studio",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-
-                            Button(
-                                onClick = { onReEnhance(EnhancementPreset.AUTO) },
-                                modifier = Modifier
-                                    .weight(1.2f)
-                                    .height(44.dp)
-                                    .testTag("re_enhance_button"),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF673AB7))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = Color.White
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Re-Remaster",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun MetricPill(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        color = Color.White.copy(alpha = 0.08f)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = label.uppercase(),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.5f)
-            )
-            Text(
-                text = value,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

@@ -130,6 +130,7 @@ import com.pixense.app.ui.theme.BentoTheme
 import com.pixense.app.ui.viewmodel.CameraAiViewModel
 import com.pixense.app.ui.viewmodel.StudioTab
 import com.pixense.app.ui.screen.AiGalleryScreen
+import com.pixense.app.ui.view.ZoomableAsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1646,7 +1647,7 @@ fun UnifiedPhotoPreviewOverlay(
                 contentAlignment = Alignment.Center
             ) {
                 // Zoomable preview so users can pinch-to-zoom and pan the image
-                com.pixense.app.ui.view.ZoomableAsyncImage(
+                ZoomableAsyncImage(
                     model = currentDisplayedUri,
                     contentDescription = photo.displayName,
                     modifier = Modifier.fillMaxSize(),
