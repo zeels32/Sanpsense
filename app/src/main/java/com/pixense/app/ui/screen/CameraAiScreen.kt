@@ -1,13 +1,16 @@
 package com.pixense.app.ui.screen
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +50,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Schedule
@@ -115,8 +119,10 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.pixense.app.R
+import com.pixense.app.data.db.EnhancedPhotoEntity
 import com.pixense.app.data.model.AiPhotoAnalysis
 import com.pixense.app.data.model.CameraPhoto
+import com.pixense.app.data.model.EnhancementQueueItem
 import com.pixense.app.data.model.EnhancementUiState
 import com.pixense.app.data.model.QueueItemStatus
 import com.pixense.app.data.model.ThemeMode
@@ -153,8 +159,39 @@ fun CameraAiScreen(
     val quotaState by viewModel.quotaState.collectAsStateWithLifecycle()
     val pendingAdPhoto by viewModel.pendingAdEnhancementPhoto.collectAsStateWithLifecycle()
     val isAdLoaded by viewModel.isAdLoaded.collectAsStateWithLifecycle()
+    val isAdLoading by viewModel.isAdLoading.collectAsStateWithLifecycle()
 
     val pendingQueueCount = queueItems.count { it.status is QueueItemStatus.Pending || it.status is QueueItemStatus.InProgress }
+
+    var lastBackPressTime by remember { mutableLongStateOf(0L) }
+    val activity = context as? Activity
+
+    // 1. If photo preview overlay is open -> close photo preview on back
+    BackHandler(enabled = previewPhoto != null) {
+        viewModel.closePhotoPreview()
+    }
+
+    // 2. If camera is open -> double back press to exit app with toast
+    BackHandler(enabled = isCameraOpen && previewPhoto == null) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastBackPressTime < 2000L) {
+            activity?.finish()
+        } else {
+            lastBackPressTime = currentTime
+            Toast.makeText(context, "Press back again to close the app", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 3. If in studio tabs:
+    // If on Gallery, Queue, Settings -> return to Studio tab
+    BackHandler(enabled = !isCameraOpen && previewPhoto == null && currentTab != StudioTab.STUDIO) {
+        viewModel.selectTab(StudioTab.STUDIO)
+    }
+
+    // If on Studio tab -> return to Camera
+    BackHandler(enabled = !isCameraOpen && previewPhoto == null && currentTab == StudioTab.STUDIO) {
+        viewModel.openCamera()
+    }
 
     LaunchedEffect(saveStatusMessage) {
         saveStatusMessage?.let { msg ->
@@ -164,87 +201,84 @@ fun CameraAiScreen(
     }
 
     if (pendingAdPhoto != null) {
-        val activity = context as? android.app.Activity
-        val limitReached = quotaState.dailyRewardedLimitReached
-
-        LaunchedEffect(Unit) {
-            if (!limitReached) {
-                viewModel.refreshAdStatus()
-            }
+        LaunchedEffect(pendingAdPhoto) {
+            viewModel.refreshAdStatus()
         }
 
         AlertDialog(
-            onDismissRequest = { viewModel.dismissAdPrompt() },
+            onDismissRequest = {
+                if (!isAdLoading) {
+                    viewModel.dismissAdPrompt()
+                }
+            },
             title = {
-                Text(
-                    text = "Enhance Photo",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = BentoTheme.colors.textPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = BentoTheme.colors.purplePrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = "Enhance Photo",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = BentoTheme.colors.textPrimary
+                    )
+                }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (limitReached) {
-                        Text(
-                            text = "You've reached today's enhancement limit.",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BentoTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = "Come back tomorrow for 3 more free enhancements.",
-                            fontSize = 13.sp,
-                            color = BentoTheme.colors.textSecondary
-                        )
-                    } else {
-                        Text(
-                            text = "You've used today's 3 free enhancements.",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BentoTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = "Watch a short ad to unlock 1 additional AI enhancement.",
-                            fontSize = 13.sp,
-                            color = BentoTheme.colors.textSecondary
-                        )
-                    }
+                    Text(
+                        text = "Watch a short ad to enhance \"${pendingAdPhoto?.displayName ?: "this photo"}\" with Gemini AI.",
+                        fontSize = 14.sp,
+                        color = BentoTheme.colors.textSecondary,
+                        lineHeight = 20.sp
+                    )
                 }
             },
             confirmButton = {
-                if (limitReached) {
-                    Button(
-                        onClick = { viewModel.dismissAdPrompt() },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
-                    ) {
-                        Text(text = "Close", color = Color.White)
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            if (activity != null) {
-                                viewModel.showRewardedAd(activity)
-                            } else {
-                                Toast.makeText(context, "Activity context not found", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        enabled = isAdLoaded,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
-                    ) {
-                        Text(text = if (isAdLoaded) "Watch Ad" else "Loading Ad…", color = Color.White)
+                Button(
+                    onClick = {
+                        if (activity != null) {
+                            viewModel.showRewardedAd(activity)
+                        } else {
+                            Toast.makeText(context, "Activity context not found", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    enabled = !isAdLoading,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
+                ) {
+                    if (isAdLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Loading Ad…", color = Color.White)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Watch Ad", color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
             },
             dismissButton = {
-                if (!limitReached) {
-                    TextButton(
-                        onClick = { viewModel.dismissAdPrompt() }
-                    ) {
-                        Text(text = "Cancel", color = BentoTheme.colors.textSecondary)
-                    }
+                TextButton(
+                    onClick = { viewModel.dismissAdPrompt() },
+                    enabled = !isAdLoading
+                ) {
+                    Text(text = "Cancel", color = BentoTheme.colors.textSecondary)
                 }
             }
         )
@@ -259,6 +293,9 @@ fun CameraAiScreen(
                 viewModel.selectTab(StudioTab.STUDIO)
             },
             latestPhoto = latestPhoto,
+            onOpenPreview = { photo ->
+                viewModel.openPhotoPreview(photo)
+            },
             onEnhancePhoto = { photo ->
                 viewModel.enhanceSpecificPhoto(photo)
             },
@@ -351,8 +388,14 @@ fun CameraAiScreen(
                 onDelete = { photo ->
                     viewModel.deleteDcimPhoto(photo)
                 },
-                isFromCamera = false,
-                freeRemaining = quotaState.freeRemaining
+                isFromCamera = isCameraOpen,
+                onOpenStudio = {
+                    viewModel.closePhotoPreview()
+                    viewModel.closeCamera()
+                    viewModel.selectTab(StudioTab.STUDIO)
+                },
+                queueItems = queueItems,
+                enhancedPhotos = enhancedPhotos
             )
         }
     }
@@ -1371,11 +1414,37 @@ fun UnifiedPhotoPreviewOverlay(
     onDelete: ((CameraPhoto) -> Unit)? = null,
     isFromCamera: Boolean = false,
     onOpenStudio: (() -> Unit)? = null,
-    freeRemaining: Int = 0,
+    queueItems: List<EnhancementQueueItem> = emptyList(),
+    enhancedPhotos: List<EnhancedPhotoEntity> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    // Check if this photo is currently being processed by the Gemini AI Queue
+    val isProcessing = queueItems.any { item ->
+        (item.photo.id == photo.id || item.photo.uri == photo.uri || item.photo.displayName == photo.displayName) &&
+        (item.status is QueueItemStatus.Pending || item.status is QueueItemStatus.InProgress)
+    }
+
+    // Check if photo is enhanced or has an enhanced entity in Room DB
+    val matchingEnhanced = enhancedPhotos.firstOrNull { entity ->
+        entity.originalUri == photo.uri ||
+        entity.originalDisplayName == photo.displayName ||
+        (entity.id != 0L && entity.id == photo.id) ||
+        entity.enhancedUri == photo.uri
+    }
+    val isEnhanced = photo.isEnhancedImage || matchingEnhanced != null
+
+    // Before/After comparison toggle state (false = show enhanced after, true = show original before)
+    var isShowingBefore by remember(photo.id, matchingEnhanced?.id) { mutableStateOf(false) }
+
+    // Active displayed image URI
+    val currentDisplayedUri = when {
+        !isEnhanced -> photo.uri
+        isShowingBefore -> matchingEnhanced?.originalUri ?: photo.uri
+        else -> matchingEnhanced?.enhancedUri ?: photo.uri
+    }
 
     if (showDeleteConfirmation) {
         AlertDialog(
@@ -1473,7 +1542,11 @@ fun UnifiedPhotoPreviewOverlay(
                         .padding(horizontal = 10.dp)
                 ) {
                     Text(
-                        text = photo.displayName,
+                        text = if (isEnhanced) {
+                            if (isShowingBefore) "[ORIGINAL] ${photo.displayName}" else "[ENHANCED] ${photo.displayName}"
+                        } else {
+                            photo.displayName
+                        },
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
@@ -1491,6 +1564,25 @@ fun UnifiedPhotoPreviewOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Compare Before/After Toggle Icon Button (ONLY added if image is enhanced by AI)
+                    if (isEnhanced) {
+                        IconButton(
+                            onClick = { isShowingBefore = !isShowingBefore },
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(if (isShowingBefore) Color(0xFFF59E0B).copy(alpha = 0.35f) else BentoTheme.colors.purplePrimary.copy(alpha = 0.45f))
+                                .testTag("preview_compare_icon_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Compare,
+                                contentDescription = "Toggle Before/After Comparison",
+                                tint = if (isShowingBefore) Color(0xFFFBBF24) else Color(0xFFC084FC),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
                     if (onDelete != null) {
                         IconButton(
                             onClick = { showDeleteConfirmation = true },
@@ -1527,7 +1619,7 @@ fun UnifiedPhotoPreviewOverlay(
                         }
                     } else {
                         IconButton(
-                            onClick = { shareUri(context, photo.uri) },
+                            onClick = { shareUri(context, currentDisplayedUri) },
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
@@ -1555,11 +1647,44 @@ fun UnifiedPhotoPreviewOverlay(
             ) {
                 // Zoomable preview so users can pinch-to-zoom and pan the image
                 com.pixense.app.ui.view.ZoomableAsyncImage(
-                    model = photo.uri,
+                    model = currentDisplayedUri,
                     contentDescription = photo.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
+
+                // Before / After Indicator Pill over the image (ONLY if enhanced by AI)
+                if (isEnhanced) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isShowingBefore) Color(0xFF1F2937).copy(alpha = 0.88f) else BentoTheme.colors.purplePrimary.copy(alpha = 0.9f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isShowingBefore) Color(0xFFF59E0B) else Color(0xFFC084FC)),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 12.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { isShowingBefore = !isShowingBefore }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isShowingBefore) Icons.Default.Compare else Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = if (isShowingBefore) Color(0xFFFBBF24) else Color.White,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = if (isShowingBefore) "BEFORE (ORIGINAL) • TAP FOR AI" else "AFTER (GEMINI AI ENHANCED) • TAP FOR BEFORE",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
 
             // Bottom Actions Card (Guaranteed on-screen above system navigation bar)
@@ -1594,12 +1719,12 @@ fun UnifiedPhotoPreviewOverlay(
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = BentoTheme.colors.purplePrimary.copy(alpha = 0.3f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoTheme.colors.purplePrimary)
+                            color = if (isEnhanced) Color(0xFF10B981).copy(alpha = 0.25f) else BentoTheme.colors.purplePrimary.copy(alpha = 0.3f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isEnhanced) Color(0xFF34D399) else BentoTheme.colors.purplePrimary)
                         ) {
                             Text(
-                                text = "GEMINI REMASTER",
-                                color = Color(0xFFC084FC),
+                                text = if (isEnhanced) "ENHANCED • 100% QUALITY" else "GEMINI REMASTER",
+                                color = if (isEnhanced) Color(0xFF34D399) else Color(0xFFC084FC),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1607,61 +1732,90 @@ fun UnifiedPhotoPreviewOverlay(
                         }
                     }
 
-                    if (freeRemaining > 0) {
-                        Text(
-                            text = "$freeRemaining free enhancement${if (freeRemaining > 1) "s" else ""} remaining today",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                    }
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Button(
-                            onClick = {
-                                onEnhance(photo)
-                                onDismiss()
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .testTag(if (isFromCamera) "preview_enhance_button" else "modal_enhance_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Enhance with Gemini AI",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .height(48.dp)
-                                .testTag(if (isFromCamera) "preview_resume_camera_button" else "modal_dismiss_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
-                        ) {
-                            Text(
-                                text = if (isFromCamera) "Resume Camera" else "Close",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        if (isProcessing) {
+                            Button(
+                                onClick = {},
+                                enabled = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("preview_processing_button"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    disabledContainerColor = BentoTheme.colors.purplePrimary.copy(alpha = 0.7f),
+                                    disabledContentColor = Color.White
+                                )
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Enhancing with Gemini AI…",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        } else if (isEnhanced) {
+                            Button(
+                                onClick = { isShowingBefore = !isShowingBefore },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("preview_compare_toggle_button"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isShowingBefore) Color(0xFF374151) else BentoTheme.colors.purplePrimary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Compare,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isShowingBefore) "Showing Original • Tap for AI Enhanced" else "Showing AI Enhanced • Tap for Original",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    onEnhance(photo)
+                                    // Keep overlay open so user can see progress and enhanced result
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag(if (isFromCamera) "preview_enhance_button" else "modal_enhance_button"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = BentoTheme.colors.purplePrimary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Enhance with Gemini AI",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
                     }
                 }

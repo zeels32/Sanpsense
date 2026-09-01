@@ -69,13 +69,12 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
     private val _pendingAdEnhancementPhoto = MutableStateFlow<CameraPhoto?>(null)
     val pendingAdEnhancementPhoto: StateFlow<CameraPhoto?> = _pendingAdEnhancementPhoto.asStateFlow()
 
-    // State flow for whether rewarded ad is loaded
-    private val _isAdLoaded = MutableStateFlow(rewardedAdManager.isAdLoaded())
-    val isAdLoaded: StateFlow<Boolean> = _isAdLoaded.asStateFlow()
+    // State flow for whether rewarded ad is loaded & loading
+    val isAdLoaded: StateFlow<Boolean> = rewardedAdManager.isAdLoaded
+    val isAdLoading: StateFlow<Boolean> = rewardedAdManager.isLoading
 
     fun refreshAdStatus() {
         rewardedAdManager.loadAd()
-        _isAdLoaded.value = rewardedAdManager.isAdLoaded()
     }
 
     fun dismissAdPrompt() {
@@ -248,12 +247,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
             queueManager.enqueue(photo, EnhancementPreset.AUTO, force = true)
             _saveStatusMessage.value = "Added \"${photo.displayName}\" to Gemini AI Queue!"
         } else {
-            val state = quotaManager.quotaState.value
-            if (state.dailyRewardedLimitReached) {
-                _saveStatusMessage.value = "Daily enhancement limit reached. Come back tomorrow!"
-            } else {
-                _pendingAdEnhancementPhoto.value = photo
-            }
+            _pendingAdEnhancementPhoto.value = photo
         }
     }
 
@@ -278,12 +272,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
             queueManager.enqueue(photo, EnhancementPreset.AUTO, force = true)
             _saveStatusMessage.value = "Added \"${photo.displayName}\" to AI processing queue."
         } else {
-            val state = quotaManager.quotaState.value
-            if (state.dailyRewardedLimitReached) {
-                _saveStatusMessage.value = "Daily enhancement limit reached. Come back tomorrow!"
-            } else {
-                _pendingAdEnhancementPhoto.value = photo
-            }
+            _pendingAdEnhancementPhoto.value = photo
         }
     }
 
@@ -327,12 +316,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
         if (_enhancementState.value is EnhancementUiState.Processing) return
 
         if (!quotaManager.hasAvailableEntitlement()) {
-            val state = quotaManager.quotaState.value
-            if (state.dailyRewardedLimitReached) {
-                _saveStatusMessage.value = "Daily enhancement limit reached. Come back tomorrow!"
-            } else {
-                _pendingAdEnhancementPhoto.value = photo
-            }
+            _pendingAdEnhancementPhoto.value = photo
             return
         }
 
@@ -342,7 +326,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
             val consumed = quotaManager.consumeEntitlement()
             if (consumed == null) {
                 _enhancementState.value = EnhancementUiState.Idle
-                _saveStatusMessage.value = "Daily quota reached. Please watch an ad to enhance."
+                _saveStatusMessage.value = "Please watch an ad to enhance."
                 return@launch
             }
 
@@ -632,12 +616,7 @@ class CameraAiViewModel(application: Application) : AndroidViewModel(application
             _selectedGalleryPhoto.value = null
             _currentTab.value = StudioTab.QUEUE
         } else {
-            val state = quotaManager.quotaState.value
-            if (state.dailyRewardedLimitReached) {
-                _saveStatusMessage.value = "Daily enhancement limit reached. Come back tomorrow!"
-            } else {
-                _pendingAdEnhancementPhoto.value = cameraPhoto
-            }
+            _pendingAdEnhancementPhoto.value = cameraPhoto
         }
     }
 

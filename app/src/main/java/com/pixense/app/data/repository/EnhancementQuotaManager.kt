@@ -15,16 +15,9 @@ enum class EntitlementType {
 }
 
 data class QuotaState(
-    val freeRemaining: Int,
-    val rewardedUsedToday: Int,
-    val pendingRewardedCount: Int,
-    val dailyRewardedLimitReached: Boolean
+    val rewardedUsedToday: Int = 0,
+    val pendingRewardedCount: Int = 0
 )
-
-object QuotaConfig {
-    const val FREE_ENHANCEMENTS_PER_DAY = 0
-    const val MAX_REWARDED_ENHANCEMENTS_PER_DAY = 5
-}
 
 class EnhancementQuotaManager private constructor(context: Context) {
 
@@ -44,7 +37,6 @@ class EnhancementQuotaManager private constructor(context: Context) {
         if (todayStr != lastDateStr) {
             prefs.edit().apply {
                 putString("key_last_quota_date", todayStr)
-                putInt("key_free_enhancements_used_today", 0)
                 putInt("key_rewarded_enhancements_used_today", 0)
                 apply()
             }
@@ -65,18 +57,12 @@ class EnhancementQuotaManager private constructor(context: Context) {
         val lastDateStr = prefs.getString("key_last_quota_date", "")
 
         val isNewDay = todayStr != lastDateStr
-        val freeUsed = if (isNewDay) 0 else prefs.getInt("key_free_enhancements_used_today", 0)
         val rewardedUsed = if (isNewDay) 0 else prefs.getInt("key_rewarded_enhancements_used_today", 0)
         val pendingCount = prefs.getInt("key_pending_rewarded_enhancement_count", 0)
 
-        val freeRemaining = (QuotaConfig.FREE_ENHANCEMENTS_PER_DAY - freeUsed).coerceAtLeast(0)
-        val limitReached = rewardedUsed >= QuotaConfig.MAX_REWARDED_ENHANCEMENTS_PER_DAY
-
         return QuotaState(
-            freeRemaining = freeRemaining,
             rewardedUsedToday = rewardedUsed,
-            pendingRewardedCount = pendingCount,
-            dailyRewardedLimitReached = limitReached
+            pendingRewardedCount = pendingCount
         )
     }
 
@@ -89,25 +75,13 @@ class EnhancementQuotaManager private constructor(context: Context) {
     fun hasAvailableEntitlement(): Boolean {
         resetQuotaIfNewDay()
         val state = readQuotaStateFromPrefs()
-        return state.freeRemaining > 0 || state.pendingRewardedCount > 0
+        return state.pendingRewardedCount > 0
     }
 
     @Synchronized
     fun consumeEntitlement(): EntitlementType? {
         resetQuotaIfNewDay()
         val state = readQuotaStateFromPrefs()
-
-        if (state.freeRemaining > 0) {
-            val freeUsed = prefs.getInt("key_free_enhancements_used_today", 0)
-            prefs.edit().putInt("key_free_enhancements_used_today", freeUsed + 1).apply()
-            updateQuotaStateFlow()
-            
-            // Check if this was the last free one, log quota exhausted event
-            if (state.freeRemaining == 1) {
-                PixenseAnalytics.logEvent("daily_free_quota_exhausted")
-            }
-            return EntitlementType.FREE
-        }
 
         if (state.pendingRewardedCount > 0) {
             prefs.edit().putInt("key_pending_rewarded_enhancement_count", state.pendingRewardedCount - 1).apply()
@@ -122,11 +96,6 @@ class EnhancementQuotaManager private constructor(context: Context) {
     fun addPendingRewardedEnhancement() {
         resetQuotaIfNewDay()
         val state = readQuotaStateFromPrefs()
-        
-        if (state.rewardedUsedToday >= QuotaConfig.MAX_REWARDED_ENHANCEMENTS_PER_DAY) {
-            PixenseAnalytics.logEvent("daily_rewarded_limit_reached")
-            return
-        }
 
         prefs.edit().apply {
             putInt("key_pending_rewarded_enhancement_count", state.pendingRewardedCount + 1)

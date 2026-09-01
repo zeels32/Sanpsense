@@ -258,7 +258,7 @@ class AiQueueManager private constructor(private val context: Context) {
         if (consumed == null) {
             updateItemStatus(
                 pendingItem.id,
-                QueueItemStatus.Stopped("Daily quota reached. Open Pixense to watch an ad and enhance."),
+                QueueItemStatus.Stopped("Open Pixense to watch an ad and enhance."),
                 0f
             )
             CameraCaptureService.showQuotaLimitNotification(context, pendingItem.photo.displayName)

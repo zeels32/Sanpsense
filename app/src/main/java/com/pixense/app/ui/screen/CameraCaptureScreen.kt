@@ -146,6 +146,7 @@ fun CameraCaptureScreen(
     onClose: () -> Unit,
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
+    onOpenPreview: (CameraPhoto) -> Unit = {},
     onEnhancePhoto: (CameraPhoto) -> Unit = {},
     onDeletePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
@@ -158,6 +159,7 @@ fun CameraCaptureScreen(
             onClose = onClose,
             onOpenGallery = onOpenGallery,
             latestPhoto = latestPhoto,
+            onOpenPreview = onOpenPreview,
             onEnhancePhoto = onEnhancePhoto,
             onDeletePhoto = onDeletePhoto,
             modifier = modifier
@@ -177,6 +179,7 @@ private fun CameraViewContent(
     onClose: () -> Unit,
     onOpenGallery: () -> Unit,
     latestPhoto: CameraPhoto?,
+    onOpenPreview: (CameraPhoto) -> Unit = {},
     onEnhancePhoto: (CameraPhoto) -> Unit = {},
     onDeletePhoto: (CameraPhoto) -> Unit = {},
     modifier: Modifier = Modifier
@@ -194,7 +197,6 @@ private fun CameraViewContent(
     var showGrid by remember { mutableStateOf(true) }
     var isCapturing by remember { mutableStateOf(false) }
     var flashScreenEffect by remember { mutableStateOf(false) }
-    var showThumbnailPreview by remember { mutableStateOf(false) }
 
     // Zoom & Hardware Lens state
     var currentZoomRatio by remember { mutableFloatStateOf(1.0f) }
@@ -808,7 +810,7 @@ private fun CameraViewContent(
                             .border(1.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                             .clickable {
                                 if (latestPhoto != null) {
-                                    showThumbnailPreview = true
+                                    onOpenPreview(latestPhoto)
                                 } else {
                                     onOpenGallery()
                                 }
@@ -938,302 +940,6 @@ private fun CameraViewContent(
                     .fillMaxSize()
                     .background(Color.White.copy(alpha = 0.85f))
             )
-        }
-
-        // Full Screen Thumbnail Preview Overlay
-        AnimatedVisibility(
-            visible = showThumbnailPreview && latestPhoto != null,
-            enter = fadeIn(animationSpec = tween(150)),
-            exit = fadeOut(animationSpec = tween(150))
-        ) {
-            if (latestPhoto != null) {
-                CameraThumbnailPreviewOverlay(
-                    photo = latestPhoto,
-                    onDismiss = { showThumbnailPreview = false },
-                    onEnhance = {
-                        onEnhancePhoto(latestPhoto)
-                        showThumbnailPreview = false
-                    },
-                    onOpenStudio = {
-                        showThumbnailPreview = false
-                        onClose()
-                        onOpenGallery()
-                    },
-                    onDelete = {
-                        onDeletePhoto(latestPhoto)
-                        showThumbnailPreview = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CameraThumbnailPreviewOverlay(
-    photo: CameraPhoto,
-    onDismiss: () -> Unit,
-    onEnhance: () -> Unit,
-    onOpenStudio: () -> Unit,
-    onDelete: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
-
-    if (showDeleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirmation = false },
-            title = {
-                Text(
-                    text = "Delete Photo?",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = Color.White
-                )
-            },
-            text = {
-                Text(
-                    text = "Are you sure you want to permanently delete \"${photo.displayName}\" from your device storage?",
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteConfirmation = false
-                        onDelete?.invoke()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.testTag("confirm_delete_camera_photo_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { showDeleteConfirmation = false },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
-                ) {
-                    Text("Cancel", color = Color.White)
-                }
-            },
-            containerColor = Color(0xFF1E1E24),
-            shape = RoundedCornerShape(20.dp)
-        )
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.96f))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { /* swallow taps */ }
-            .testTag("camera_thumbnail_preview_overlay")
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-        ) {
-            // Top Action Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .testTag("close_preview_overlay_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close Preview",
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp)
-                ) {
-                    Text(
-                        text = photo.displayName,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "${photo.resolutionText} • ${photo.formattedSize}",
-                        color = Color.White.copy(alpha = 0.72f),
-                        fontSize = 11.sp
-                    )
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (onDelete != null) {
-                        IconButton(
-                            onClick = { showDeleteConfirmation = true },
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFE53935).copy(alpha = 0.3f))
-                                .testTag("camera_preview_delete_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete Photo",
-                                tint = Color(0xFFFF8A80),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onOpenStudio,
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f))
-                            .testTag("preview_open_studio_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Open Gallery/Studio",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            // High Resolution Center Image (Takes weight(1f), never pushes bottom card off screen)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(
-                    model = photo.uri,
-                    contentDescription = photo.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                )
-            }
-
-            // Bottom Details & Action Card (Guaranteed on-screen above system navigation bar)
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = Color(0xFF1E1E24).copy(alpha = 0.95f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${photo.formattedSize} • ${photo.mimeType.substringAfterLast("/").uppercase()}",
-                            color = Color.White.copy(alpha = 0.75f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF10B981).copy(alpha = 0.2f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981))
-                        ) {
-                            Text(
-                                text = "DCIM CAMERA",
-                                color = Color(0xFF34D399),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = onEnhance,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .testTag("preview_enhance_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = BentoPurplePrimary)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Enhance with Gemini AI",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .height(48.dp)
-                                .testTag("preview_resume_camera_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
-                        ) {
-                            Text("Resume Camera", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
         }
     }
 }

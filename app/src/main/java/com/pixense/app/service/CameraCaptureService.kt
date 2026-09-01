@@ -124,7 +124,6 @@ class CameraCaptureService : Service() {
                     showNewPhotoNotification(photo.displayName, isAutoProcessing = true)
                 } else {
                     showQuotaLimitNotification(applicationContext, photo.displayName)
-                    PixenseAnalytics.logEvent("daily_free_quota_exhausted")
                 }
             } else {
                 showNewPhotoNotification(photo.displayName, isAutoProcessing = false)
@@ -257,8 +256,8 @@ class CameraCaptureService : Service() {
             )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ALERT_ID)
-                .setContentTitle("Daily Quota Reached")
-                .setContentText("Tap here to unlock AI enhancement for \"$photoName\".")
+                .setContentTitle("Enhance with Gemini AI")
+                .setContentText("Tap to watch an ad and enhance \"$photoName\".")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
