@@ -8,8 +8,8 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" tools:ignore="ScopedStorage" />
 
     <!-- Foreground Service Permissions -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+<!--    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />-->
+<!--    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />-->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Network for AI enhancement -->
@@ -49,10 +49,10 @@
         </activity>
 
         <!-- Background Service for detecting newly captured camera photos -->
-        <service
+        <!--<service
             android:name=".service.CameraCaptureService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync" />-->
 
         <provider
             android:name="androidx.core.content.FileProvider"
