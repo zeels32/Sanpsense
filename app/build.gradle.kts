@@ -12,46 +12,53 @@ plugins {
 
 android {
     namespace = "com.pixense.app"
-    compileSdk { version = release(36) { minorApiLevel = 1 } }
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
+    val localProperties = gradleLocalProperties(rootDir, providers)
 
     defaultConfig {
         applicationId = "com.pixense.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Read proAdUnitId from local.properties
-        val localProperties = gradleLocalProperties(rootDir, providers)
         val proAdUnitId = localProperties.getProperty("proAdUnitId")
         buildConfigField("String", "PRO_AD_UNIT_ID", "\"$proAdUnitId\"")
     }
 
     signingConfigs {
-      create("release") {
-        val keystorePath = "${rootDir}/pixense.jks"
-        storeFile = file(keystorePath)
-        storePassword = System.getenv("") ?: "@Solanki232@"
-        keyAlias = "zeelsolanki"
-        keyPassword = System.getenv("") ?: "@Solanki232@"
-      }
-      create("debugConfig") {
-        storeFile = file("${rootDir}/debug.keystore")
-        storePassword = "android"
-        keyAlias = "androiddebugkey"
-        keyPassword = "android"
-      }
+        create("release") {
+            val keystorePath = "${rootDir}/pixense.jks"
+            storeFile = file(keystorePath)
+            storePassword = localProperties.getProperty("KEYSTORE_PASSWORD")
+            keyAlias = localProperties.getProperty("KEY_ALIAS")
+            keyPassword = localProperties.getProperty("KEY_PASSWORD")
+        }
+        create("debugConfig") {
+            storeFile = file("${rootDir}/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
-      release {
-        isCrunchPngs = false
-        isMinifyEnabled = false
-        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-        signingConfig = signingConfigs.getByName("release")
-      }
+        release {
+            isCrunchPngs = false
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
 //      debug { signingConfig = signingConfigs.getByName("debugConfig") }
     }
 
