@@ -6,11 +6,14 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.hardware.camera2.CaptureRequest
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import kotlin.OptIn
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -19,6 +22,9 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.MeteringPointFactory
 import androidx.camera.core.Preview
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
@@ -270,8 +276,17 @@ private fun CameraViewContent(
                 val cameraProvider = cameraProviderFuture.get()
                 cameraProvider.unbindAll()
 
+                val aspectRatioStrategy = AspectRatioStrategy(
+                    selectedAspectRatio.cameraXRatio,
+                    AspectRatioStrategy.FALLBACK_RULE_AUTO
+                )
+
+                val previewResolutionSelector = ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(aspectRatioStrategy)
+                    .build()
+
                 val preview = Preview.Builder()
-                    .setTargetAspectRatio(selectedAspectRatio.cameraXRatio)
+                    .setResolutionSelector(previewResolutionSelector)
                     .build().also {
                         it.surfaceProvider = previewView?.surfaceProvider
                     }
@@ -282,11 +297,54 @@ private fun CameraViewContent(
                     CameraFlashMode.OFF -> ImageCapture.FLASH_MODE_OFF
                 }
 
-                val capture = ImageCapture.Builder()
-                    .setTargetAspectRatio(selectedAspectRatio.cameraXRatio)
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                    .setFlashMode(captureFlashMode)
+                // Force CameraX to select the MAXIMUM physical sensor resolution supported
+                val captureResolutionSelector = ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(aspectRatioStrategy)
+                    .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
                     .build()
+
+                val captureBuilder = ImageCapture.Builder()
+                    .setResolutionSelector(captureResolutionSelector)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                    .setJpegQuality(100)
+                    .setFlashMode(captureFlashMode)
+
+                // Request hardware Image Signal Processor (ISP) high quality edge & noise reduction
+                val camera2Extender = Camera2Interop.Extender(captureBuilder)
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.EDGE_MODE,
+                    CaptureRequest.EDGE_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.NOISE_REDUCTION_MODE,
+                    CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.COLOR_CORRECTION_MODE,
+                    CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.TONEMAP_MODE,
+                    CaptureRequest.TONEMAP_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.HOT_PIXEL_MODE,
+                    CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.SHADING_MODE,
+                    CaptureRequest.SHADING_MODE_HIGH_QUALITY
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                )
+                camera2Extender.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AE_ANTIBANDING_MODE,
+                    CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO
+                )
+
+                val capture = captureBuilder.build()
 
                 val cameraSelector = CameraSelector.Builder()
                     .requireLensFacing(lensFacing)
@@ -1204,8 +1262,10 @@ fun CameraPermissionRequestView(
 }
 
 /**
- * Captures image via CameraX, handles selfie horizontal mirroring if enabled,
- * crops to 1:1 if needed, and stores directly into standard DCIM/Camera/ MediaStore directory.
+ * Captures image via CameraX with maximum sensor resolution and 100% JPEG quality.
+ * Handles selfie horizontal mirroring losslessly via CameraX metadata.
+ * Performs square crop with full ARGB_8888 fidelity and EXIF preservation when 1:1 aspect ratio is selected.
+ * Stores directly into standard DCIM/Camera/ MediaStore directory.
  */
 private fun takePhotoAndSaveToDcim(
     context: Context,
@@ -1220,11 +1280,19 @@ private fun takePhotoAndSaveToDcim(
     val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(timestamp))
     val fileName = "IMG_$dateStr"
 
-    val shouldProcessBitmap = (isFrontCamera && mirrorSelfie) || (aspectRatio == CameraAspectRatio.RATIO_1_1)
+    // Configure CameraX native metadata for lossless front-camera selfie mirroring
+    val metadata = ImageCapture.Metadata().apply {
+        isReversedHorizontal = (isFrontCamera && mirrorSelfie)
+    }
 
-    if (shouldProcessBitmap) {
+    // Only 1:1 square aspect ratio requires post-capture bitmap cropping since camera sensors are 4:3 or 16:9
+    val shouldCropSquare = (aspectRatio == CameraAspectRatio.RATIO_1_1)
+
+    if (shouldCropSquare) {
         val tempFile = File.createTempFile("temp_cam_", ".jpg", context.cacheDir)
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(tempFile).build()
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(tempFile)
+            .setMetadata(metadata)
+            .build()
 
         imageCapture.takePicture(
             outputOptions,
@@ -1233,8 +1301,8 @@ private fun takePhotoAndSaveToDcim(
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                         try {
-                            val exif = ExifInterface(tempFile.absolutePath)
-                            val orientation = exif.getAttributeInt(
+                            val sourceExif = ExifInterface(tempFile.absolutePath)
+                            val orientation = sourceExif.getAttributeInt(
                                 ExifInterface.TAG_ORIENTATION,
                                 ExifInterface.ORIENTATION_NORMAL
                             )
@@ -1245,7 +1313,11 @@ private fun takePhotoAndSaveToDcim(
                                 else -> 0f
                             }
 
-                            val originalBitmap = BitmapFactory.decodeFile(tempFile.absolutePath)
+                            val decodeOptions = BitmapFactory.Options().apply {
+                                inPreferredConfig = Bitmap.Config.ARGB_8888
+                                inMutable = true
+                            }
+                            val originalBitmap = BitmapFactory.decodeFile(tempFile.absolutePath, decodeOptions)
                             if (originalBitmap == null) {
                                 withContext(Dispatchers.Main) {
                                     onError(ImageCaptureException(ImageCapture.ERROR_FILE_IO, "Failed to decode captured image", null))
@@ -1257,33 +1329,32 @@ private fun takePhotoAndSaveToDcim(
                             if (rotationDegrees != 0f) {
                                 matrix.postRotate(rotationDegrees)
                             }
-                            if (isFrontCamera && mirrorSelfie) {
-                                matrix.postScale(-1f, 1f)
-                            }
 
-                            var transformedBitmap = Bitmap.createBitmap(
-                                originalBitmap,
-                                0,
-                                0,
-                                originalBitmap.width,
-                                originalBitmap.height,
-                                matrix,
-                                true
-                            )
-
-                            // Apply square crop if 1:1 ratio selected
-                            if (aspectRatio == CameraAspectRatio.RATIO_1_1) {
-                                val squareSize = min(transformedBitmap.width, transformedBitmap.height)
-                                val xOffset = (transformedBitmap.width - squareSize) / 2
-                                val yOffset = (transformedBitmap.height - squareSize) / 2
-                                transformedBitmap = Bitmap.createBitmap(
-                                    transformedBitmap,
-                                    xOffset,
-                                    yOffset,
-                                    squareSize,
-                                    squareSize
+                            val transformedBitmap = if (rotationDegrees != 0f) {
+                                Bitmap.createBitmap(
+                                    originalBitmap,
+                                    0,
+                                    0,
+                                    originalBitmap.width,
+                                    originalBitmap.height,
+                                    matrix,
+                                    true
                                 )
+                            } else {
+                                originalBitmap
                             }
+
+                            // Apply square crop centered
+                            val squareSize = min(transformedBitmap.width, transformedBitmap.height)
+                            val xOffset = (transformedBitmap.width - squareSize) / 2
+                            val yOffset = (transformedBitmap.height - squareSize) / 2
+                            val squareBitmap = Bitmap.createBitmap(
+                                transformedBitmap,
+                                xOffset,
+                                yOffset,
+                                squareSize,
+                                squareSize
+                            )
 
                             val contentValues = ContentValues().apply {
                                 put(MediaStore.Images.Media.DISPLAY_NAME, "$fileName.jpg")
@@ -1292,6 +1363,7 @@ private fun takePhotoAndSaveToDcim(
                                 put(MediaStore.Images.Media.DATE_TAKEN, timestamp)
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                     put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera")
+                                    put(MediaStore.Images.Media.IS_PENDING, 1)
                                 }
                             }
 
@@ -1301,8 +1373,54 @@ private fun takePhotoAndSaveToDcim(
                             )
                             if (savedUri != null) {
                                 context.contentResolver.openOutputStream(savedUri)?.use { stream ->
-                                    transformedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                                    // Save at 100% maximum JPEG quality
+                                    squareBitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
                                 }
+
+                                // Preserve EXIF tags from original capture into the cropped image
+                                try {
+                                    context.contentResolver.openFileDescriptor(savedUri, "rw")?.use { pfd ->
+                                        val destExif = ExifInterface(pfd.fileDescriptor)
+                                        val exifTags = arrayOf(
+                                            ExifInterface.TAG_DATETIME,
+                                            ExifInterface.TAG_DATETIME_ORIGINAL,
+                                            ExifInterface.TAG_DATETIME_DIGITIZED,
+                                            ExifInterface.TAG_MAKE,
+                                            ExifInterface.TAG_MODEL,
+                                            ExifInterface.TAG_FOCAL_LENGTH,
+                                            ExifInterface.TAG_FLASH,
+                                            ExifInterface.TAG_WHITE_BALANCE,
+                                            ExifInterface.TAG_ISO_SPEED_RATINGS,
+                                            ExifInterface.TAG_EXPOSURE_TIME,
+                                            ExifInterface.TAG_F_NUMBER,
+                                            ExifInterface.TAG_COLOR_SPACE
+                                        )
+                                        for (tag in exifTags) {
+                                            val value = sourceExif.getAttribute(tag)
+                                            if (value != null) {
+                                                destExif.setAttribute(tag, value)
+                                            }
+                                        }
+                                        destExif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                                        destExif.setAttribute(ExifInterface.TAG_IMAGE_WIDTH, squareBitmap.width.toString())
+                                        destExif.setAttribute(ExifInterface.TAG_IMAGE_LENGTH, squareBitmap.height.toString())
+                                        destExif.saveAttributes()
+                                    }
+                                } catch (exifErr: Exception) {
+                                    Log.w("CameraCaptureScreen", "Failed to copy EXIF attributes: ${exifErr.message}")
+                                }
+
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    val updateValues = ContentValues().apply {
+                                        put(MediaStore.Images.Media.IS_PENDING, 0)
+                                    }
+                                    try {
+                                        context.contentResolver.update(savedUri, updateValues, null, null)
+                                    } catch (e: Exception) {
+                                        Log.w("CameraCaptureScreen", "Failed to clear pending flag", e)
+                                    }
+                                }
+
                                 tempFile.delete()
                                 withContext(Dispatchers.Main) {
                                     onSuccess(savedUri)
@@ -1329,6 +1447,7 @@ private fun takePhotoAndSaveToDcim(
         return
     }
 
+    // Direct capture path for native 4:3 and 16:9 aspect ratios (maximum resolution, zero recompression)
     val contentValues = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, "$fileName.jpg")
         put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -1344,7 +1463,7 @@ private fun takePhotoAndSaveToDcim(
         context.contentResolver,
         MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
         contentValues
-    ).build()
+    ).setMetadata(metadata).build()
 
     imageCapture.takePicture(
         outputOptions,

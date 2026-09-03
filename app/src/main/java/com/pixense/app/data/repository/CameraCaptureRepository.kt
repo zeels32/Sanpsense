@@ -527,7 +527,7 @@ class CameraCaptureRepository(private val context: Context) {
             markUriAsEnhanced(uri, newFileName)
 
             contentResolver.openOutputStream(uri)?.use { stream ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

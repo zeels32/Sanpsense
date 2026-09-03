@@ -13,7 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Precision
+import coil.size.Size
 
 // A lightweight zoomable AsyncImage. Supports pinch-to-zoom, pan and double-tap-to-toggle zoom.
 @Composable
@@ -28,6 +32,20 @@ fun ZoomableAsyncImage(
     var scale by remember { mutableStateOf(1f) }
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
+    val context = LocalContext.current
+
+    val imageRequest = remember(model) {
+        if (model is ImageRequest) {
+            model
+        } else {
+            ImageRequest.Builder(context)
+                .data(model)
+                .size(Size.ORIGINAL)
+                .precision(Precision.EXACT)
+                .crossfade(true)
+                .build()
+        }
+    }
 
     Box(
         modifier = modifier
@@ -58,7 +76,7 @@ fun ZoomableAsyncImage(
             }
     ) {
         AsyncImage(
-            model = model,
+            model = imageRequest,
             contentDescription = contentDescription,
             contentScale = contentScale,
             modifier = Modifier

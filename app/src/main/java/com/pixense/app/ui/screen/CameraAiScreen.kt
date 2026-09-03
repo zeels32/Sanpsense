@@ -2436,7 +2436,7 @@ private fun shareBitmap(context: android.content.Context, bitmap: Bitmap) {
         cachePath.mkdirs()
         val file = java.io.File(cachePath, "enhanced_share.jpg")
         val stream = java.io.FileOutputStream(file)
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
         stream.close()
 
         val contentUri = androidx.core.content.FileProvider.getUriForFile(
