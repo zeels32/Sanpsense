@@ -112,6 +112,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import com.pixense.app.data.camera.CameraFocusHelper
 import com.pixense.app.data.camera.CameraLensDetector
 import com.pixense.app.data.camera.CameraLensPreset
 import com.pixense.app.data.model.CameraPhoto
@@ -231,6 +232,7 @@ private fun CameraViewContent(
 
     // Focus & Exposure indicator state
     var focusPoint by remember { mutableStateOf<Offset?>(null) }
+    var isFocusLocked by remember { mutableStateOf<Boolean?>(null) }
     var focusRingScale by remember { mutableFloatStateOf(1.3f) }
     var focusDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
@@ -431,31 +433,34 @@ private fun CameraViewContent(
                                 },
                                 onTap = { offset ->
                                     focusPoint = offset
+                                    isFocusLocked = null
                                     setExposure(0)
                                     dragAccumulator = 0f
                                     val pView = previewView ?: return@detectTapGestures
-                                    val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
-                                        pView.width.toFloat(),
-                                        pView.height.toFloat()
-                                    )
-                                    val point = factory.createPoint(offset.x, offset.y)
-                                    val action = FocusMeteringAction.Builder(
-                                        point,
-                                        FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-                                    )
-                                        .setAutoCancelDuration(4, TimeUnit.SECONDS)
-                                        .build()
+                                    val activeCam = camera ?: return@detectTapGestures
 
-                                    camera?.cameraControl?.startFocusAndMetering(action)
+                                    // Trigger CameraX tap-to-focus and tap-to-expose via CameraFocusHelper
+                                    CameraFocusHelper.tapToFocusAndExpose(
+                                        previewView = pView,
+                                        camera = activeCam,
+                                        x = offset.x,
+                                        y = offset.y,
+                                        autoCancelSeconds = 3L
+                                    ) { isSuccess ->
+                                        if (focusPoint == offset) {
+                                            isFocusLocked = isSuccess
+                                        }
+                                    }
 
                                     focusDismissJob?.cancel()
                                     focusDismissJob = coroutineScope.launch {
                                         focusRingScale = 1.4f
                                         delay(100)
                                         focusRingScale = 1.0f
-                                        delay(3500)
+                                        delay(3000)
                                         if (focusPoint == offset) {
                                             focusPoint = null
+                                            isFocusLocked = null
                                         }
                                     }
                                 }
@@ -488,9 +493,17 @@ private fun CameraViewContent(
                     val restartDismissTimer: () -> Unit = {
                         focusDismissJob?.cancel()
                         focusDismissJob = coroutineScope.launch {
-                            delay(3500)
+                            delay(3000)
                             focusPoint = null
+                            isFocusLocked = null
                         }
+                    }
+
+                    // Dynamic color: Emerald Green when locked, Amber on failure/timeout, Gold while actively focusing
+                    val reticleColor = when (isFocusLocked) {
+                        true -> Color(0xFF10B981)
+                        false -> Color(0xFFF59E0B)
+                        null -> Color(0xFFFFD700)
                     }
 
                     // Focus reticle
@@ -504,13 +517,13 @@ private fun CameraViewContent(
                             }
                             .size(72.dp)
                             .scale(animatedScale)
-                            .border(2.dp, Color(0xFFFFD700), CircleShape),
+                            .border(2.dp, reticleColor, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
-                                .background(Color(0xFFFFD700), CircleShape)
+                                .background(reticleColor, CircleShape)
                         )
                     }
 
